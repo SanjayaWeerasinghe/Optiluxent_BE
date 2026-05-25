@@ -1,0 +1,55 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - unparam
+    - dogsled
+    - exportloopref
+    - gocritic
+    - godot
+    - noctx
+    - bodyclose
+    - contextcheck
+
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: erp-system
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+    disabled-checks:
+      - commentedOutCode
+      - whyNoLint
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - unparam
+    - path: cmd/
+      linters:
+        - unparam
+    - linters:
+        - gocritic
+      text: "appendAssign"
+  max-issues-per-linter: 50
+  max-same-issues: 10

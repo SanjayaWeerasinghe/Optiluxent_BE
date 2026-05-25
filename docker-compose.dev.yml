@@ -1,0 +1,135 @@
+version: '3.8'
+
+# Development docker-compose.
+# Uses Dockerfile.dev (golang:1.24-alpine + Air hot-reload).
+# Source code is volume-mounted so every file save triggers a rebuild.
+#
+# Usage:
+#   docker-compose -f docker-compose.dev.yml up --build
+#   docker-compose -f docker-compose.dev.yml down
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       erp_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - erp-dev-network
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"   # host 6380 avoids clash with other projects on 6379
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - erp-dev-network
+
+  # ── ClickHouse (ledger DB) ──────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: erp-clickhouse-dev
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB:       erp_ledger
+      CLICKHOUSE_USER:     default
+      CLICKHOUSE_PASSWORD: ""
+    ports:
+      - "9000:9000"   # native protocol
+      - "8123:8123"   # HTTP interface
+    volumes:
+      - clickhouse_dev_data:/var/lib/clickhouse
+    healthcheck:
+      test:     ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - erp-dev-network
+
+  # ── API (hot-reload) ─────────────────────────────────────────────────────────
+  api:
+    build:
+      context:    .
+      dockerfile: Dockerfile.dev
+    container_name: erp-api-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # App
+      ENV:   development
+      DEBUG: "true"
+      # Server
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Database
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_USER:     postgres
+      DB_PASSWORD: postgres
+      DB_NAME:     erp_db
+      DB_SSL_MODE: disable
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # ClickHouse
+      CH_HOST:     clickhouse
+      CH_PORT:     9000
+      CH_DATABASE: erp_ledger
+      CH_USER:     default
+      CH_PASSWORD: ""
+      # JWT
+      JWT_SECRET: dev-secret-change-in-production
+    volumes:
+      # Mount source code for hot-reload; node_modules / tmp are excluded
+      - .:/app
+      - /app/tmp          # keep the Air build-output dir inside the container
+      - go_pkg_cache:/root/go/pkg  # cache compiled Go packages across restarts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - erp-dev-network
+
+networks:
+  erp-dev-network:
+    driver: bridge
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  clickhouse_dev_data:
+    driver: local
+  go_pkg_cache:
+    driver: local

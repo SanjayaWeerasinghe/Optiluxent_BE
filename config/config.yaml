@@ -1,0 +1,80 @@
+# ERP System Configuration
+
+server:
+  port: 3000
+  host: 0.0.0.0
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+  body_limit: 4194304  # 4MB
+  enable_cors: true
+  enable_swagger: true
+  prefork: false  # Enable in production to use all CPU cores
+  enable_compression: true
+
+database:
+  host: 127.0.0.1
+  port: 5433  # Using 5433 to avoid conflict with local PostgreSQL on 5432
+  user: postgres
+  password: postgres
+  database: erp_db
+  ssl_mode: disable
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  log_level: warn
+  auto_migrate: false
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+  min_idle_conns: 5
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  enable_cache: true
+
+jwt:
+  secret: "change-this-secret-key-in-production"
+  access_token_expiry: 1h
+  refresh_token_expiry: 168h  # 7 days
+  issuer: "erp-system"
+  enable_refresh_token: true
+  enable_token_blacklist: true
+
+cors:
+  allow_origins:
+    - "*"
+  allow_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - PATCH
+    - OPTIONS
+  allow_headers:
+    - Origin
+    - Content-Type
+    - Accept
+    - Authorization
+  allow_credentials: false  # Cannot be true with wildcard origins
+  expose_headers:
+    - Content-Length
+  max_age: 86400
+
+logging:
+  level: info
+  format: json
+  output_path: stdout
+  enable_file: false
+
+app:
+  name: "ERP System"
+  version: "1.0.0"
+  environment: development
+  debug: true
+  timezone: "UTC"

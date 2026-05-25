@@ -1,0 +1,125 @@
+version: '3.8'
+
+# Production / CI docker-compose.
+# Builds the multi-stage Dockerfile, runs migrations then starts the server.
+# For local development with hot-reload use docker-compose.dev.yml instead.
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       erp_db
+      PGDATA:            /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"   # host 5433 → container 5432 (avoids clash with local PG)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - erp-network
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - erp-network
+
+  # ── ClickHouse (ledger DB) ──────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: erp-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB:       erp_ledger
+      CLICKHOUSE_USER:     default
+      CLICKHOUSE_PASSWORD: ""
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test:     ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - erp-network
+
+  # ── API Server ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context:    .
+      dockerfile: Dockerfile
+    container_name: erp-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # App
+      ENV:   production
+      DEBUG: "false"
+      # Server
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Database  (points to the postgres service, not localhost)
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_USER:     postgres
+      DB_PASSWORD: postgres
+      DB_NAME:     erp_db
+      DB_SSL_MODE: disable
+      # Redis  (points to the redis service)
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # ClickHouse
+      CH_HOST:     clickhouse
+      CH_PORT:     9000
+      CH_DATABASE: erp_ledger
+      CH_USER:     default
+      CH_PASSWORD: ""
+      # JWT  (override in production with a real secret)
+      JWT_SECRET: change-this-in-production-use-env-file
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - erp-network
+
+networks:
+  erp-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  clickhouse_data:
+    driver: local

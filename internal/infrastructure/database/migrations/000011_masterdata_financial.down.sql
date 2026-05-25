@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS tax_group_codes;
+DROP TABLE IF EXISTS tax_groups;
+DROP TABLE IF EXISTS tax_codes;
+DROP TABLE IF EXISTS company_bank_accounts;
+DROP TABLE IF EXISTS banks;
+DROP TABLE IF EXISTS payment_terms;
+DROP TABLE IF EXISTS cost_centers;
+DROP TABLE IF EXISTS chart_of_accounts;
+DROP TABLE IF EXISTS exchange_rates;
+ALTER TABLE companies DROP CONSTRAINT IF EXISTS fk_companies_base_currency;
+DROP TABLE IF EXISTS currencies;

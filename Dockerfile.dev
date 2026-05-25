@@ -1,0 +1,23 @@
+# Development image – Go + Air hot reload
+# Source code is volume-mounted so rebuilds happen on every file save.
+FROM golang:1.24-alpine
+
+RUN apk --no-cache add git curl
+
+WORKDIR /app
+
+# Install Air (hot reload runner) — pin to last version compatible with Go 1.24
+RUN go install github.com/air-verse/air@v1.61.5
+
+# Pre-download Go module dependencies (cached layer)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Source will be volume-mounted at runtime; the COPY below is for the initial
+# image build only so 'go mod download' can resolve packages.
+COPY . .
+
+EXPOSE 3000
+
+# On startup: run migrations first, then start Air.
+CMD ["sh", "-c", "go run cmd/migrate/main.go -command up && air -c .air.toml"]

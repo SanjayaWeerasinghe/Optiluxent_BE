@@ -1,0 +1,2430 @@
+{
+  "info": {
+    "name": "Kadahapola ERP API",
+    "description": "Complete API collection for Kadahapola ERP System — Batches 3–5 + Procurement + Inventory",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "7.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "prId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "prItemId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "poId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "poItemId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "grnId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "grnItemId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "invoiceLineId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "mrId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mrLineId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "gtId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "gtLineId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "giId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "giLineId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "saId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "saLineId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "qcId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "qcLineId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user@example.com\",\"password\":\"Test@12345\",\"first_name\":\"Test\",\"last_name\":\"User\"}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "  pm.collectionVariables.set('accessToken', json.data.access_token);",
+                  "  pm.collectionVariables.set('refreshToken', json.data.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"admin@kadahapola.com\",\"password\":\"Admin@123456\"}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"{{refreshToken}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feature Flags",
+      "item": [
+        {
+          "name": "List Flags",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feature-flags"
+          }
+        },
+        {
+          "name": "Create Flag",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feature-flags",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"new-feature\",\"description\":\"Enable new feature\",\"enabled\":true,\"rules\":{\"user_ids\":[1,2],\"percentage\":50}}"
+            }
+          }
+        },
+        {
+          "name": "Get Flag",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feature-flags/new-feature"
+          }
+        },
+        {
+          "name": "Set Enabled",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feature-flags/new-feature/enabled",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"enabled\":false}"
+            }
+          }
+        },
+        {
+          "name": "Invalidate Cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feature-flags/new-feature/invalidate"
+          }
+        },
+        {
+          "name": "Delete Flag",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feature-flags/new-feature"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users"
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/1"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"first_name\":\"Admin\",\"last_name\":\"Updated\"}"
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"current_password\":\"Admin@12345\",\"new_password\":\"NewAdmin@12345\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/roles"
+          }
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/roles",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"warehouse_manager\",\"description\":\"Manages warehouse operations\"}"
+            }
+          }
+        },
+        {
+          "name": "List Permissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/permissions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenants",
+      "item": [
+        {
+          "name": "List Tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/tenants"
+          }
+        },
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/tenants",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"New Branch\",\"slug\":\"new-branch\",\"plan\":\"standard\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs?limit=20&offset=0",
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "resource",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "action",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health/"
+          }
+        },
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health/live"
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Procurement",
+      "description": "Full purchasing lifecycle: Purchase Requests → Purchase Orders → Goods Receipts → Purchase Invoices",
+      "item": [
+        {
+          "name": "Purchase Requests",
+          "item": [
+            {
+              "name": "List PRs",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/procurement/purchase-requests",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT",
+                      "disabled": true
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create PR",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('prId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"request_date\": \"2026-05-23\",\n  \"required_date\": \"2026-06-01\",\n  \"requested_by\": 1,\n  \"department_id\": 1,\n  \"notes\": \"Monthly raw material requisition\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get PR",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}"
+              }
+            },
+            {
+              "name": "Update PR",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"required_date\": \"2026-06-10\",\n  \"notes\": \"Updated delivery date\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete PR",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}"
+              }
+            },
+            {
+              "name": "Submit PR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/submit"
+              }
+            },
+            {
+              "name": "Approve PR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/approve"
+              }
+            },
+            {
+              "name": "Reject PR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/reject"
+              }
+            },
+            {
+              "name": "Cancel PR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/cancel"
+              }
+            }
+          ]
+        },
+        {
+          "name": "PR Items",
+          "item": [
+            {
+              "name": "List PR Items",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/items"
+              }
+            },
+            {
+              "name": "Add PR Item",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('prItemId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"variant_id\": null,\n  \"description\": \"Raw cotton bale\",\n  \"quantity\": 50,\n  \"uom_id\": 1,\n  \"estimated_price\": 850.00,\n  \"transfer_ratio\": 1.0,\n  \"currency_id\": 1,\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get PR Item",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/items/{{prItemId}}"
+              }
+            },
+            {
+              "name": "Update PR Item",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/items/{{prItemId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 60,\n  \"uom_id\": 1,\n  \"estimated_price\": 870.00,\n  \"transfer_ratio\": 1.0,\n  \"currency_id\": 1\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete PR Item",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-requests/{{prId}}/items/{{prItemId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Purchase Orders",
+          "item": [
+            {
+              "name": "List POs",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/procurement/purchase-orders",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT",
+                      "disabled": true
+                    },
+                    {
+                      "key": "supplier_id",
+                      "value": "1",
+                      "disabled": true
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create PO",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('poId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"supplier_id\": 1,\n  \"pr_id\": null,\n  \"order_date\": \"2026-05-23\",\n  \"expected_date\": \"2026-06-05\",\n  \"currency_id\": 1,\n  \"exchange_rate\": 1.0,\n  \"payment_term_id\": null,\n  \"warehouse_id\": 1,\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get PO",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}"
+              }
+            },
+            {
+              "name": "Update PO",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"expected_date\": \"2026-06-10\",\n  \"discount_amount\": 0,\n  \"notes\": \"Revised expected date\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete PO",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}"
+              }
+            },
+            {
+              "name": "Confirm PO",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/confirm",
+                "description": "Transitions DRAFT → CONFIRMED. Auto-creates a DRAFT Purchase Invoice."
+              }
+            },
+            {
+              "name": "Cancel PO",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/cancel"
+              }
+            }
+          ]
+        },
+        {
+          "name": "PO Items",
+          "item": [
+            {
+              "name": "List PO Items",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/items"
+              }
+            },
+            {
+              "name": "Add PO Item",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('poItemId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"variant_id\": null,\n  \"description\": \"Raw cotton bale\",\n  \"quantity\": 50,\n  \"uom_id\": 1,\n  \"unit_price\": 900.00,\n  \"discount_pct\": 0,\n  \"tax_code_id\": null,\n  \"transfer_ratio\": 1.0,\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get PO Item",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/items/{{poItemId}}"
+              }
+            },
+            {
+              "name": "Update PO Item",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/items/{{poItemId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 60,\n  \"uom_id\": 1,\n  \"unit_price\": 880.00,\n  \"discount_pct\": 0,\n  \"transfer_ratio\": 1.0\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete PO Item",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-orders/{{poId}}/items/{{poItemId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Goods Receipts",
+          "item": [
+            {
+              "name": "List GRNs",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/procurement/goods-receipts",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT",
+                      "disabled": true
+                    },
+                    {
+                      "key": "po_id",
+                      "value": "1",
+                      "disabled": true
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create GRN",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('grnId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"po_id\": {{poId}},\n  \"supplier_id\": 1,\n  \"receipt_date\": \"2026-05-23\",\n  \"warehouse_id\": 1,\n  \"notes\": \"Partial delivery\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "po_id is optional. If provided, the PO's invoice must be in DRAFT or CANCELLED status."
+              }
+            },
+            {
+              "name": "Get GRN",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts/{{grnId}}"
+              }
+            },
+            {
+              "name": "Confirm GRN",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts/{{grnId}}/confirm",
+                "description": "Updates stock ledger and auto-appends lines to the PO's DRAFT invoice."
+              }
+            }
+          ]
+        },
+        {
+          "name": "GRN Items",
+          "item": [
+            {
+              "name": "List GRN Items",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts/{{grnId}}/items"
+              }
+            },
+            {
+              "name": "Add GRN Item",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('grnItemId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts/{{grnId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"po_line_id\": {{poItemId}},\n  \"product_id\": 1,\n  \"variant_id\": null,\n  \"quantity\": 12,\n  \"uom_id\": 1,\n  \"location_id\": null,\n  \"unit_cost\": 300.00,\n  \"transfer_ratio\": 1.0,\n  \"notes\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "po_line_id links to the PO line for 3-way match pricing on the invoice."
+              }
+            },
+            {
+              "name": "Get GRN Item",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts/{{grnId}}/items/{{grnItemId}}"
+              }
+            },
+            {
+              "name": "Update GRN Item",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/goods-receipts/{{grnId}}/items/{{grnItemId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 15,\n  \"uom_id\": 1,\n  \"unit_cost\": 300.00,\n  \"transfer_ratio\": 1.0\n}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Purchase Invoices",
+          "item": [
+            {
+              "name": "List Invoices",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/procurement/purchase-invoices",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT",
+                      "disabled": true
+                    },
+                    {
+                      "key": "supplier_id",
+                      "value": "1",
+                      "disabled": true
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Invoice (manual)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('invoiceId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"po_id\": {{poId}},\n  \"supplier_invoice_no\": \"SUP-INV-2026-100\",\n  \"supplier_invoice_date\": \"2026-05-22\",\n  \"invoice_date\": \"2026-05-23\",\n  \"due_date\": \"2026-06-22\",\n  \"currency_id\": 1,\n  \"exchange_rate\": 1.0,\n  \"payment_term_id\": null,\n  \"notes\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Manual invoice creation. An invoice is also auto-created when a PO is confirmed."
+              }
+            },
+            {
+              "name": "Get Invoice",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices/{{invoiceId}}"
+              }
+            },
+            {
+              "name": "Post Invoice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices/{{invoiceId}}/post",
+                "description": "Transitions DRAFT → POSTED. Emits procurement.invoice.posted event."
+              }
+            },
+            {
+              "name": "Record Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices/{{invoiceId}}/pay",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 1800.00,\n  \"payment_date\": \"2026-05-23\",\n  \"payment_ref\": \"CHQ-001\",\n  \"notes\": \"First instalment\"\n}"
+                },
+                "description": "Partial or full payment. Emits procurement.payment.recorded event."
+              }
+            },
+            {
+              "name": "Cancel Invoice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices/{{invoiceId}}/cancel"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invoice Lines",
+          "item": [
+            {
+              "name": "Add Invoice Line",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var json = pm.response.json();",
+                      "if (json.data && json.data.id) { pm.collectionVariables.set('invoiceLineId', json.data.id); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices/{{invoiceId}}/lines",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"grn_line_id\": {{grnItemId}},\n  \"product_id\": 1,\n  \"variant_id\": null,\n  \"description\": \"Raw cotton bale\",\n  \"quantity\": 12,\n  \"uom_id\": 1,\n  \"unit_price\": 900.00,\n  \"discount_pct\": 0,\n  \"tax_code_id\": null,\n  \"supplier_invoice_no\": \"SUP-INV-2026-100\",\n  \"notes\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "DRAFT invoice only. Lines are also auto-appended when a linked GRN is confirmed."
+              }
+            },
+            {
+              "name": "Delete Invoice Line",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/procurement/purchase-invoices/{{invoiceId}}/lines/{{invoiceLineId}}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "description": "Full inventory lifecycle: Material Requests → Goods Transfers → Goods Issues → Stock Adjustments → Quality Checks → Stock Balance",
+      "item": [
+        {
+          "name": "Material Requests",
+          "item": [
+            {
+              "name": "List MRs",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/material-requests?status=DRAFT",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create MR",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"mrId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requested_by\": 1,\n  \"warehouse_id\": 1,\n  \"needed_date\": \"2026-06-01\",\n  \"notes\": \"Test MR\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get MR",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}"
+              }
+            },
+            {
+              "name": "Update MR",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"warehouse_id\": 1,\n  \"needed_date\": \"2026-06-01\",\n  \"notes\": \"Updated\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Approve MR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}/approve"
+              }
+            },
+            {
+              "name": "Reject MR",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}/reject",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Not needed\"\n}"
+                }
+              }
+            },
+            {
+              "name": "List MR Lines",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}/items"
+              }
+            },
+            {
+              "name": "Add MR Line",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"mrLineId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"requested_qty\": 10,\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Update MR Line",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}/items/{{mrLineId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"requested_qty\": 10,\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete MR Line",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/material-requests/{{mrId}}/items/{{mrLineId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Goods Transfers",
+          "item": [
+            {
+              "name": "List Transfers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/transfers?status=DRAFT",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Transfer",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"gtId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from_warehouse_id\": 1,\n  \"to_warehouse_id\": 2,\n  \"transfer_date\": \"2026-06-01\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get Transfer",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}"
+              }
+            },
+            {
+              "name": "Update Transfer",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"from_warehouse_id\": 1,\n  \"to_warehouse_id\": 2,\n  \"transfer_date\": \"2026-06-01\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Send Transfer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}/send"
+              }
+            },
+            {
+              "name": "Receive Transfer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}/receive"
+              }
+            },
+            {
+              "name": "List Transfer Lines",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}/items"
+              }
+            },
+            {
+              "name": "Add Transfer Line",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"gtLineId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"quantity\": 5\n}"
+                }
+              }
+            },
+            {
+              "name": "Update Transfer Line",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}/items/{{gtLineId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"quantity\": 5\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Transfer Line",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/transfers/{{gtId}}/items/{{gtLineId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Goods Issues",
+          "item": [
+            {
+              "name": "List Issues",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/issues?status=DRAFT",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Issue",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"giId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"issue_date\": \"2026-06-01\",\n  \"warehouse_id\": 1,\n  \"issue_reason\": \"PRODUCTION\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get Issue",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}"
+              }
+            },
+            {
+              "name": "Update Issue",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"issue_date\": \"2026-06-01\",\n  \"warehouse_id\": 1,\n  \"issue_reason\": \"PRODUCTION\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Confirm Issue",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}/confirm"
+              }
+            },
+            {
+              "name": "List Issue Lines",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}/items"
+              }
+            },
+            {
+              "name": "Add Issue Line",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"giLineId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"quantity\": 3,\n  \"unit_cost\": 100\n}"
+                }
+              }
+            },
+            {
+              "name": "Update Issue Line",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}/items/{{giLineId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"quantity\": 3,\n  \"unit_cost\": 100\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Issue Line",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/issues/{{giId}}/items/{{giLineId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stock Adjustments",
+          "item": [
+            {
+              "name": "List Adjustments",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/adjustments?status=DRAFT",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "DRAFT"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Adjustment",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"saId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"adjustment_date\": \"2026-06-01\",\n  \"warehouse_id\": 1,\n  \"adjust_reason\": \"STOCKTAKE\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get Adjustment",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}"
+              }
+            },
+            {
+              "name": "Update Adjustment",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"adjustment_date\": \"2026-06-01\",\n  \"warehouse_id\": 1,\n  \"adjust_reason\": \"STOCKTAKE\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Confirm Adjustment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}/confirm"
+              }
+            },
+            {
+              "name": "List Adjustment Lines",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}/items"
+              }
+            },
+            {
+              "name": "Add Adjustment Line",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"saLineId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"quantity\": 5,\n  \"unit_cost\": 50,\n  \"notes\": \"\"\n}",
+                  "description": "quantity can be negative for deduction"
+                }
+              }
+            },
+            {
+              "name": "Update Adjustment Line",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}/items/{{saLineId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"uom_id\": 1,\n  \"quantity\": 5,\n  \"unit_cost\": 50,\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Adjustment Line",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/adjustments/{{saId}}/items/{{saLineId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quality Checks",
+          "item": [
+            {
+              "name": "List Quality Checks",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/quality-checks?status=PENDING",
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "PENDING"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Quality Check",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"qcId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"warehouse_id\": 1,\n  \"check_date\": \"2026-06-01\",\n  \"reference_type\": \"GOODS_RECEIPT\",\n  \"notes\": \"\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Get Quality Check",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks/{{qcId}}"
+              }
+            },
+            {
+              "name": "Start Quality Check",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks/{{qcId}}/start"
+              }
+            },
+            {
+              "name": "Submit Quality Check",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks/{{qcId}}/submit"
+              }
+            },
+            {
+              "name": "List QC Lines",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks/{{qcId}}/items"
+              }
+            },
+            {
+              "name": "Add QC Line",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "  const body = pm.response.json();",
+                      "  const id = body.data?.id;",
+                      "  if (id) pm.collectionVariables.set(\"qcLineId\", id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks/{{qcId}}/items",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"qty_checked\": 10,\n  \"qty_passed\": 9,\n  \"qty_failed\": 1,\n  \"result\": \"PARTIAL\",\n  \"rejection_reason\": \"Defect\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Update QC Line",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/v1/inventory/quality-checks/{{qcId}}/items/{{qcLineId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"product_id\": 1,\n  \"qty_checked\": 10,\n  \"qty_passed\": 9,\n  \"qty_failed\": 1,\n  \"result\": \"PARTIAL\",\n  \"rejection_reason\": \"Defect\"\n}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stock Balance",
+          "item": [
+            {
+              "name": "Stock Balance (by warehouse)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/stock?warehouse_id=1",
+                  "query": [
+                    {
+                      "key": "warehouse_id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Stock Balance (by product)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/inventory/stock?product_id=1",
+                  "query": [
+                    {
+                      "key": "product_id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
