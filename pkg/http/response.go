@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strconv"
+
 	"erp-system/pkg/errors"
 
 	"github.com/gofiber/fiber/v2"
@@ -181,6 +183,24 @@ func ServiceUnavailable(c *fiber.Ctx, message string) error {
 // JSON sends a custom JSON response
 func JSON(c *fiber.Ctx, status int, data interface{}) error {
 	return c.Status(status).JSON(data)
+}
+
+// ParsePage extracts page/per_page from query params.
+// Returns page, perPage, limit (=perPage), offset ((page-1)*perPage).
+// Defaults: page=1, per_page=20, max per_page=100.
+func ParsePage(c *fiber.Ctx) (page, perPage, limit, offset int) {
+	page, _ = strconv.Atoi(c.Query("page", "1"))
+	perPage, _ = strconv.Atoi(c.Query("per_page", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+	return page, perPage, perPage, (page - 1) * perPage
 }
 
 // Paginate calculates pagination metadata
