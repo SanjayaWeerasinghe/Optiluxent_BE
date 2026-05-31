@@ -10,54 +10,63 @@ import (
 // Repository defines persistence operations for the Financial submodule.
 type Repository interface {
 	// Currencies
-	ListCurrencies(ctx context.Context) ([]*Currency, error)
+	CountCurrencies(ctx context.Context) (int64, error)
+	ListCurrencies(ctx context.Context, limit, offset int) ([]*Currency, error)
 	GetCurrency(ctx context.Context, id uint) (*Currency, error)
 	CreateCurrency(ctx context.Context, c *Currency) error
 	UpdateCurrency(ctx context.Context, c *Currency) error
 	SetBaseCurrency(ctx context.Context, id uint) error
 
 	// Exchange Rates
-	ListExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time) ([]*ExchangeRate, error)
+	CountExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time) (int64, error)
+	ListExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time, limit, offset int) ([]*ExchangeRate, error)
 	GetLatestRates(ctx context.Context, tenantID uint) ([]*ExchangeRate, error)
 	CreateExchangeRate(ctx context.Context, r *ExchangeRate) error
 
 	// Chart of Accounts
-	ListCoA(ctx context.Context, tenantID uint) ([]*ChartOfAccount, error)
+	CountCoA(ctx context.Context, tenantID uint) (int64, error)
+	ListCoA(ctx context.Context, tenantID uint, limit, offset int) ([]*ChartOfAccount, error)
 	GetCoA(ctx context.Context, id, tenantID uint) (*ChartOfAccount, error)
 	CreateCoA(ctx context.Context, a *ChartOfAccount) error
 	UpdateCoA(ctx context.Context, a *ChartOfAccount) error
 	DeleteCoA(ctx context.Context, id, tenantID uint) error
 
 	// Cost Centers
-	ListCostCenters(ctx context.Context, tenantID uint) ([]*CostCenter, error)
+	CountCostCenters(ctx context.Context, tenantID uint) (int64, error)
+	ListCostCenters(ctx context.Context, tenantID uint, limit, offset int) ([]*CostCenter, error)
 	GetCostCenter(ctx context.Context, id, tenantID uint) (*CostCenter, error)
 	CreateCostCenter(ctx context.Context, cc *CostCenter) error
 	UpdateCostCenter(ctx context.Context, cc *CostCenter) error
 
 	// Payment Terms
-	ListPaymentTerms(ctx context.Context, tenantID uint) ([]*PaymentTerm, error)
+	CountPaymentTerms(ctx context.Context, tenantID uint) (int64, error)
+	ListPaymentTerms(ctx context.Context, tenantID uint, limit, offset int) ([]*PaymentTerm, error)
 	GetPaymentTerm(ctx context.Context, id, tenantID uint) (*PaymentTerm, error)
 	CreatePaymentTerm(ctx context.Context, pt *PaymentTerm) error
 	UpdatePaymentTerm(ctx context.Context, pt *PaymentTerm) error
 
 	// Banks
-	ListBanks(ctx context.Context) ([]*Bank, error)
+	CountBanks(ctx context.Context) (int64, error)
+	ListBanks(ctx context.Context, limit, offset int) ([]*Bank, error)
 	CreateBank(ctx context.Context, b *Bank) error
 
 	// Company Bank Accounts
-	ListBankAccounts(ctx context.Context, tenantID uint) ([]*CompanyBankAccount, error)
+	CountBankAccounts(ctx context.Context, tenantID uint) (int64, error)
+	ListBankAccounts(ctx context.Context, tenantID uint, limit, offset int) ([]*CompanyBankAccount, error)
 	GetBankAccount(ctx context.Context, id, tenantID uint) (*CompanyBankAccount, error)
 	CreateBankAccount(ctx context.Context, ba *CompanyBankAccount) error
 	UpdateBankAccount(ctx context.Context, ba *CompanyBankAccount) error
 
 	// Tax Codes
-	ListTaxCodes(ctx context.Context, tenantID uint) ([]*TaxCode, error)
+	CountTaxCodes(ctx context.Context, tenantID uint) (int64, error)
+	ListTaxCodes(ctx context.Context, tenantID uint, limit, offset int) ([]*TaxCode, error)
 	GetTaxCode(ctx context.Context, id, tenantID uint) (*TaxCode, error)
 	CreateTaxCode(ctx context.Context, t *TaxCode) error
 	UpdateTaxCode(ctx context.Context, t *TaxCode) error
 
 	// Tax Groups
-	ListTaxGroups(ctx context.Context, tenantID uint) ([]*TaxGroup, error)
+	CountTaxGroups(ctx context.Context, tenantID uint) (int64, error)
+	ListTaxGroups(ctx context.Context, tenantID uint, limit, offset int) ([]*TaxGroup, error)
 	GetTaxGroup(ctx context.Context, id, tenantID uint) (*TaxGroup, error)
 	CreateTaxGroup(ctx context.Context, tg *TaxGroup) error
 	UpdateTaxGroup(ctx context.Context, tg *TaxGroup) error
@@ -73,9 +82,18 @@ func NewRepository(db *gorm.DB) Repository {
 
 // ── Currencies ────────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListCurrencies(ctx context.Context) ([]*Currency, error) {
+func (r *dbRepository) CountCurrencies(ctx context.Context) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&Currency{}).Count(&count).Error
+}
+
+func (r *dbRepository) ListCurrencies(ctx context.Context, limit, offset int) ([]*Currency, error) {
 	var list []*Currency
-	err := r.db.WithContext(ctx).Order("code").Find(&list).Error
+	q := r.db.WithContext(ctx)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("code").Find(&list).Error
 	return list, err
 }
 
@@ -107,7 +125,22 @@ func (r *dbRepository) SetBaseCurrency(ctx context.Context, id uint) error {
 
 // ── Exchange Rates ────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time) ([]*ExchangeRate, error) {
+func (r *dbRepository) CountExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&ExchangeRate{}).Where("tenant_id = ?", tenantID)
+	if fromCurrencyID != nil {
+		q = q.Where("from_currency_id = ?", *fromCurrencyID)
+	}
+	if from != nil {
+		q = q.Where("effective_date >= ?", *from)
+	}
+	if to != nil {
+		q = q.Where("effective_date <= ?", *to)
+	}
+	var count int64
+	return count, q.Count(&count).Error
+}
+
+func (r *dbRepository) ListExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time, limit, offset int) ([]*ExchangeRate, error) {
 	var list []*ExchangeRate
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if fromCurrencyID != nil {
@@ -118,6 +151,9 @@ func (r *dbRepository) ListExchangeRates(ctx context.Context, tenantID uint, fro
 	}
 	if to != nil {
 		q = q.Where("effective_date <= ?", *to)
+	}
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
 	}
 	err := q.Order("effective_date DESC").Find(&list).Error
 	return list, err
@@ -145,12 +181,20 @@ func (r *dbRepository) CreateExchangeRate(ctx context.Context, rate *ExchangeRat
 
 // ── Chart of Accounts ─────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListCoA(ctx context.Context, tenantID uint) ([]*ChartOfAccount, error) {
-	var list []*ChartOfAccount
-	err := r.db.WithContext(ctx).
+func (r *dbRepository) CountCoA(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&ChartOfAccount{}).
 		Where("tenant_id = ? AND deleted_at IS NULL", tenantID).
-		Order("code").
-		Find(&list).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListCoA(ctx context.Context, tenantID uint, limit, offset int) ([]*ChartOfAccount, error) {
+	var list []*ChartOfAccount
+	q := r.db.WithContext(ctx).Where("tenant_id = ? AND deleted_at IS NULL", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("code").Find(&list).Error
 	return list, err
 }
 
@@ -181,12 +225,20 @@ func (r *dbRepository) DeleteCoA(ctx context.Context, id, tenantID uint) error {
 
 // ── Cost Centers ──────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListCostCenters(ctx context.Context, tenantID uint) ([]*CostCenter, error) {
-	var list []*CostCenter
-	err := r.db.WithContext(ctx).
+func (r *dbRepository) CountCostCenters(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&CostCenter{}).
 		Where("tenant_id = ? AND deleted_at IS NULL", tenantID).
-		Order("code").
-		Find(&list).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListCostCenters(ctx context.Context, tenantID uint, limit, offset int) ([]*CostCenter, error) {
+	var list []*CostCenter
+	q := r.db.WithContext(ctx).Where("tenant_id = ? AND deleted_at IS NULL", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("code").Find(&list).Error
 	return list, err
 }
 
@@ -211,12 +263,20 @@ func (r *dbRepository) UpdateCostCenter(ctx context.Context, cc *CostCenter) err
 
 // ── Payment Terms ─────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListPaymentTerms(ctx context.Context, tenantID uint) ([]*PaymentTerm, error) {
-	var list []*PaymentTerm
-	err := r.db.WithContext(ctx).
+func (r *dbRepository) CountPaymentTerms(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&PaymentTerm{}).
 		Where("tenant_id = ? AND is_active = true", tenantID).
-		Order("code").
-		Find(&list).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListPaymentTerms(ctx context.Context, tenantID uint, limit, offset int) ([]*PaymentTerm, error) {
+	var list []*PaymentTerm
+	q := r.db.WithContext(ctx).Where("tenant_id = ? AND is_active = true", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("code").Find(&list).Error
 	return list, err
 }
 
@@ -241,12 +301,18 @@ func (r *dbRepository) UpdatePaymentTerm(ctx context.Context, pt *PaymentTerm) e
 
 // ── Banks ─────────────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListBanks(ctx context.Context) ([]*Bank, error) {
+func (r *dbRepository) CountBanks(ctx context.Context) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&Bank{}).Where("is_active = true").Count(&count).Error
+}
+
+func (r *dbRepository) ListBanks(ctx context.Context, limit, offset int) ([]*Bank, error) {
 	var list []*Bank
-	err := r.db.WithContext(ctx).
-		Where("is_active = true").
-		Order("name").
-		Find(&list).Error
+	q := r.db.WithContext(ctx).Where("is_active = true")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("name").Find(&list).Error
 	return list, err
 }
 
@@ -256,11 +322,20 @@ func (r *dbRepository) CreateBank(ctx context.Context, b *Bank) error {
 
 // ── Company Bank Accounts ─────────────────────────────────────────────────────
 
-func (r *dbRepository) ListBankAccounts(ctx context.Context, tenantID uint) ([]*CompanyBankAccount, error) {
-	var list []*CompanyBankAccount
-	err := r.db.WithContext(ctx).
+func (r *dbRepository) CountBankAccounts(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&CompanyBankAccount{}).
 		Where("tenant_id = ? AND is_active = true", tenantID).
-		Find(&list).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListBankAccounts(ctx context.Context, tenantID uint, limit, offset int) ([]*CompanyBankAccount, error) {
+	var list []*CompanyBankAccount
+	q := r.db.WithContext(ctx).Where("tenant_id = ? AND is_active = true", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Find(&list).Error
 	return list, err
 }
 
@@ -285,12 +360,20 @@ func (r *dbRepository) UpdateBankAccount(ctx context.Context, ba *CompanyBankAcc
 
 // ── Tax Codes ─────────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListTaxCodes(ctx context.Context, tenantID uint) ([]*TaxCode, error) {
-	var list []*TaxCode
-	err := r.db.WithContext(ctx).
+func (r *dbRepository) CountTaxCodes(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&TaxCode{}).
 		Where("tenant_id = ? AND is_active = true", tenantID).
-		Order("code").
-		Find(&list).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListTaxCodes(ctx context.Context, tenantID uint, limit, offset int) ([]*TaxCode, error) {
+	var list []*TaxCode
+	q := r.db.WithContext(ctx).Where("tenant_id = ? AND is_active = true", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("code").Find(&list).Error
 	return list, err
 }
 
@@ -315,13 +398,20 @@ func (r *dbRepository) UpdateTaxCode(ctx context.Context, t *TaxCode) error {
 
 // ── Tax Groups ────────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListTaxGroups(ctx context.Context, tenantID uint) ([]*TaxGroup, error) {
-	var list []*TaxGroup
-	err := r.db.WithContext(ctx).
-		Preload("TaxCodes").
+func (r *dbRepository) CountTaxGroups(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&TaxGroup{}).
 		Where("tenant_id = ? AND is_active = true", tenantID).
-		Order("name").
-		Find(&list).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListTaxGroups(ctx context.Context, tenantID uint, limit, offset int) ([]*TaxGroup, error) {
+	var list []*TaxGroup
+	q := r.db.WithContext(ctx).Preload("TaxCodes").Where("tenant_id = ? AND is_active = true", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("name").Find(&list).Error
 	return list, err
 }
 
