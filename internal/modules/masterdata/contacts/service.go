@@ -14,11 +14,18 @@ type Service struct{ repo Repository }
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
-func (s *Service) ListParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool) ([]Party, error) {
+func (s *Service) CountParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool) (int64, error) {
+	if partyType != "" && !validPartyTypes[partyType] {
+		return 0, fmt.Errorf("invalid party_type: %s", partyType)
+	}
+	return s.repo.CountParties(ctx, tenantID, partyType, activeOnly)
+}
+
+func (s *Service) ListParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool, limit, offset int) ([]Party, error) {
 	if partyType != "" && !validPartyTypes[partyType] {
 		return nil, fmt.Errorf("invalid party_type: %s", partyType)
 	}
-	return s.repo.ListParties(ctx, tenantID, partyType, activeOnly)
+	return s.repo.ListParties(ctx, tenantID, partyType, activeOnly, limit, offset)
 }
 
 func (s *Service) GetParty(ctx context.Context, tenantID, id uint) (*Party, error) {
