@@ -38,11 +38,17 @@ func validateStruct(v *validator.Validate, s interface{}) map[string]interface{}
 // ── BOMs ──────────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListBOMs(c *fiber.Ctx) error {
-	rows, err := h.svc.ListBOMs(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountBOMs(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count BOMs")
+	}
+	rows, err := h.svc.ListBOMs(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list BOMs")
 	}
-	return httputil.Success(c, "BOMs retrieved", rows)
+	return httputil.SuccessWithMeta(c, "BOMs retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetBOM(c *fiber.Ctx) error {
@@ -133,11 +139,17 @@ func (h *Handler) DeleteBOMLine(c *fiber.Ctx) error {
 // ── Work Centers ──────────────────────────────────────────────────────────────
 
 func (h *Handler) ListWorkCenters(c *fiber.Ctx) error {
-	rows, err := h.svc.ListWorkCenters(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountWorkCenters(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count work centers")
+	}
+	rows, err := h.svc.ListWorkCenters(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list work centers")
 	}
-	return httputil.Success(c, "work centers retrieved", rows)
+	return httputil.SuccessWithMeta(c, "work centers retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) CreateWorkCenter(c *fiber.Ctx) error {
@@ -185,11 +197,17 @@ func (h *Handler) DeleteWorkCenter(c *fiber.Ctx) error {
 // ── Routings ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListRoutings(c *fiber.Ctx) error {
-	rows, err := h.svc.ListRoutings(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountRoutings(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count routings")
+	}
+	rows, err := h.svc.ListRoutings(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list routings")
 	}
-	return httputil.Success(c, "routings retrieved", rows)
+	return httputil.SuccessWithMeta(c, "routings retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetRouting(c *fiber.Ctx) error {
