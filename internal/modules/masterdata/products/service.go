@@ -20,8 +20,12 @@ func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
-func (s *Service) ListCategories(ctx context.Context, tenantID uint) ([]ProductCategory, error) {
-	return s.repo.ListCategories(ctx, tenantID)
+func (s *Service) CountCategories(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountCategories(ctx, tenantID)
+}
+
+func (s *Service) ListCategories(ctx context.Context, tenantID uint, limit, offset int) ([]ProductCategory, error) {
+	return s.repo.ListCategories(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) CreateCategory(ctx context.Context, tenantID uint, req *CreateCategoryRequest) (*ProductCategory, error) {
@@ -65,8 +69,12 @@ func (s *Service) DeleteCategory(ctx context.Context, tenantID, id uint) error {
 
 // ── UOMs ──────────────────────────────────────────────────────────────────────
 
-func (s *Service) ListUOMs(ctx context.Context, tenantID uint) ([]UnitOfMeasure, error) {
-	return s.repo.ListUOMs(ctx, tenantID)
+func (s *Service) CountUOMs(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountUOMs(ctx, tenantID)
+}
+
+func (s *Service) ListUOMs(ctx context.Context, tenantID uint, limit, offset int) ([]UnitOfMeasure, error) {
+	return s.repo.ListUOMs(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) CreateUOM(ctx context.Context, tenantID uint, req *CreateUOMRequest) (*UnitOfMeasure, error) {
@@ -119,11 +127,18 @@ func (s *Service) UpdateUOM(ctx context.Context, tenantID, id uint, req *UpdateU
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
-func (s *Service) ListProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool) ([]Product, error) {
+func (s *Service) CountProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool) (int64, error) {
+	if productType != "" && !validProductTypes[productType] {
+		return 0, fmt.Errorf("invalid product_type: %s", productType)
+	}
+	return s.repo.CountProducts(ctx, tenantID, productType, activeOnly)
+}
+
+func (s *Service) ListProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool, limit, offset int) ([]Product, error) {
 	if productType != "" && !validProductTypes[productType] {
 		return nil, fmt.Errorf("invalid product_type: %s", productType)
 	}
-	return s.repo.ListProducts(ctx, tenantID, productType, activeOnly)
+	return s.repo.ListProducts(ctx, tenantID, productType, activeOnly, limit, offset)
 }
 
 func (s *Service) GetProduct(ctx context.Context, tenantID, id uint) (*Product, error) {

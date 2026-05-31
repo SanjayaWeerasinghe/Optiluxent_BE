@@ -8,20 +8,23 @@ import (
 
 type Repository interface {
 	// Categories
-	ListCategories(ctx context.Context, tenantID uint) ([]ProductCategory, error)
+	CountCategories(ctx context.Context, tenantID uint) (int64, error)
+	ListCategories(ctx context.Context, tenantID uint, limit, offset int) ([]ProductCategory, error)
 	GetCategory(ctx context.Context, tenantID, id uint) (*ProductCategory, error)
 	CreateCategory(ctx context.Context, c *ProductCategory) error
 	UpdateCategory(ctx context.Context, c *ProductCategory) error
 	DeleteCategory(ctx context.Context, tenantID, id uint) error
 
 	// UOMs
-	ListUOMs(ctx context.Context, tenantID uint) ([]UnitOfMeasure, error)
+	CountUOMs(ctx context.Context, tenantID uint) (int64, error)
+	ListUOMs(ctx context.Context, tenantID uint, limit, offset int) ([]UnitOfMeasure, error)
 	GetUOM(ctx context.Context, tenantID, id uint) (*UnitOfMeasure, error)
 	CreateUOM(ctx context.Context, u *UnitOfMeasure) error
 	UpdateUOM(ctx context.Context, u *UnitOfMeasure) error
 
 	// Products
-	ListProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool) ([]Product, error)
+	CountProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool) (int64, error)
+	ListProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool, limit, offset int) ([]Product, error)
 	GetProduct(ctx context.Context, tenantID, id uint) (*Product, error)
 	CreateProduct(ctx context.Context, p *Product) error
 	UpdateProduct(ctx context.Context, p *Product) error
@@ -43,9 +46,18 @@ type dbRepository struct{ db *gorm.DB }
 
 func NewRepository(db *gorm.DB) Repository { return &dbRepository{db: db} }
 
-func (r *dbRepository) ListCategories(ctx context.Context, tenantID uint) ([]ProductCategory, error) {
+func (r *dbRepository) CountCategories(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&ProductCategory{}).Where("tenant_id = ?", tenantID).Count(&count).Error
+}
+
+func (r *dbRepository) ListCategories(ctx context.Context, tenantID uint, limit, offset int) ([]ProductCategory, error) {
 	var rows []ProductCategory
-	return rows, r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("name").Find(&rows).Error
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	return rows, q.Order("name").Find(&rows).Error
 }
 
 func (r *dbRepository) GetCategory(ctx context.Context, tenantID, id uint) (*ProductCategory, error) {
@@ -66,9 +78,18 @@ func (r *dbRepository) DeleteCategory(ctx context.Context, tenantID, id uint) er
 	return r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).Delete(&ProductCategory{}).Error
 }
 
-func (r *dbRepository) ListUOMs(ctx context.Context, tenantID uint) ([]UnitOfMeasure, error) {
+func (r *dbRepository) CountUOMs(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&UnitOfMeasure{}).Where("tenant_id = ?", tenantID).Count(&count).Error
+}
+
+func (r *dbRepository) ListUOMs(ctx context.Context, tenantID uint, limit, offset int) ([]UnitOfMeasure, error) {
 	var rows []UnitOfMeasure
-	return rows, r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("name").Find(&rows).Error
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	return rows, q.Order("name").Find(&rows).Error
 }
 
 func (r *dbRepository) GetUOM(ctx context.Context, tenantID, id uint) (*UnitOfMeasure, error) {
@@ -85,13 +106,28 @@ func (r *dbRepository) UpdateUOM(ctx context.Context, u *UnitOfMeasure) error {
 	return r.db.WithContext(ctx).Save(u).Error
 }
 
-func (r *dbRepository) ListProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool) ([]Product, error) {
+func (r *dbRepository) CountProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&Product{}).Where("tenant_id = ?", tenantID)
+	if productType != "" {
+		q = q.Where("product_type = ?", productType)
+	}
+	if activeOnly {
+		q = q.Where("is_active = true")
+	}
+	var count int64
+	return count, q.Count(&count).Error
+}
+
+func (r *dbRepository) ListProducts(ctx context.Context, tenantID uint, productType string, activeOnly bool, limit, offset int) ([]Product, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if productType != "" {
 		q = q.Where("product_type = ?", productType)
 	}
 	if activeOnly {
 		q = q.Where("is_active = true")
+	}
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
 	}
 	var rows []Product
 	return rows, q.Order("name").Find(&rows).Error

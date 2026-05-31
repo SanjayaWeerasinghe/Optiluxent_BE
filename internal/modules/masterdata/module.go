@@ -2,6 +2,8 @@ package masterdata
 
 import (
 	"context"
+	"os"
+	"strconv"
 
 	auditinfra "erp-system/internal/infrastructure/audit"
 	"erp-system/internal/domain/rbac"
@@ -12,6 +14,9 @@ import (
 	"erp-system/internal/modules/masterdata/hr"
 	"erp-system/internal/modules/masterdata/inventory"
 	"erp-system/internal/modules/masterdata/manufacturing"
+	"erp-system/internal/modules/masterdata/materials"
+	"erp-system/internal/modules/masterdata/mmcategories"
+	"erp-system/internal/modules/masterdata/mrp"
 	"erp-system/internal/modules/masterdata/organization"
 	"erp-system/internal/modules/masterdata/products"
 
@@ -22,13 +27,16 @@ type Module struct {
 	enforcer    rbac.Enforcer
 	auditLogger *auditinfra.Logger
 
-	orgService  *organization.Service
-	finService  *financial.Service
-	conService  *contacts.Service
-	prodService *products.Service
-	invService  *inventory.Service
-	mfgService  *manufacturing.Service
-	hrService   *hr.Service
+	orgService    *organization.Service
+	finService    *financial.Service
+	conService    *contacts.Service
+	prodService   *products.Service
+	invService    *inventory.Service
+	mfgService    *manufacturing.Service
+	hrService     *hr.Service
+	mrpService    *mrp.Service
+	matService    *materials.Service
+	mmCatService  *mmcategories.Service
 }
 
 func New(enforcer rbac.Enforcer, auditLogger *auditinfra.Logger) *Module {
@@ -49,6 +57,16 @@ func (m *Module) Initialize(deps modules.Dependencies) error {
 	m.invService = inventory.NewService(inventory.NewRepository(deps.DB))
 	m.mfgService = manufacturing.NewService(manufacturing.NewRepository(deps.DB))
 	m.hrService = hr.NewService(hr.NewRepository(deps.DB))
+	m.mrpService = mrp.NewService(mrp.NewRepository(deps.DB))
+	m.matService = materials.NewService(materials.NewRepository(deps.DB))
+
+	maxDepth := 5
+	if v := os.Getenv("MM_CATEGORY_MAX_DEPTH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxDepth = n
+		}
+	}
+	m.mmCatService = mmcategories.NewService(mmcategories.NewRepository(deps.DB), maxDepth)
 	return nil
 }
 
@@ -60,6 +78,9 @@ func (m *Module) RegisterRoutes(router fiber.Router) {
 	inventory.RegisterRoutes(router.Group("/inventory"), inventory.NewHandler(m.invService), m.enforcer, m.auditLogger)
 	manufacturing.RegisterRoutes(router.Group("/manufacturing"), manufacturing.NewHandler(m.mfgService), m.enforcer, m.auditLogger)
 	hr.RegisterRoutes(router.Group("/hr"), hr.NewHandler(m.hrService), m.enforcer, m.auditLogger)
+	mrp.RegisterRoutes(router.Group("/mrp"), mrp.NewHandler(m.mrpService), m.enforcer, m.auditLogger)
+	materials.RegisterRoutes(router.Group("/materials"), materials.NewHandler(m.matService), m.enforcer, m.auditLogger)
+	mmcategories.RegisterRoutes(router.Group("/material-categories"), mmcategories.NewHandler(m.mmCatService), m.enforcer, m.auditLogger)
 }
 
 func (m *Module) RegisterEvents(_ events.EventBus) {}

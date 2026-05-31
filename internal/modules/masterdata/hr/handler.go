@@ -38,11 +38,17 @@ func validateStruct(v *validator.Validate, s interface{}) map[string]interface{}
 // ── Job Positions ─────────────────────────────────────────────────────────────
 
 func (h *Handler) ListJobPositions(c *fiber.Ctx) error {
-	rows, err := h.svc.ListJobPositions(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountJobPositions(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count job positions")
+	}
+	rows, err := h.svc.ListJobPositions(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list job positions")
 	}
-	return httputil.Success(c, "job positions retrieved", rows)
+	return httputil.SuccessWithMeta(c, "job positions retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) CreateJobPosition(c *fiber.Ctx) error {
@@ -88,11 +94,16 @@ func (h *Handler) ListEmployees(c *fiber.Ctx) error {
 			deptID = &v
 		}
 	}
-	rows, err := h.svc.ListEmployees(c.Context(), tenantID, activeOnly, deptID)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountEmployees(c.Context(), tenantID, activeOnly, deptID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count employees")
+	}
+	rows, err := h.svc.ListEmployees(c.Context(), tenantID, activeOnly, deptID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list employees")
 	}
-	return httputil.Success(c, "employees retrieved", rows)
+	return httputil.SuccessWithMeta(c, "employees retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetEmployee(c *fiber.Ctx) error {

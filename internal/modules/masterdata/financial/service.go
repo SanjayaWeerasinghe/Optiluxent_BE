@@ -18,8 +18,12 @@ func NewService(repo Repository) *Service {
 
 // ── Currencies ────────────────────────────────────────────────────────────────
 
-func (s *Service) ListCurrencies(ctx context.Context) ([]*Currency, error) {
-	return s.repo.ListCurrencies(ctx)
+func (s *Service) CountCurrencies(ctx context.Context) (int64, error) {
+	return s.repo.CountCurrencies(ctx)
+}
+
+func (s *Service) ListCurrencies(ctx context.Context, limit, offset int) ([]*Currency, error) {
+	return s.repo.ListCurrencies(ctx, limit, offset)
 }
 
 func (s *Service) GetCurrency(ctx context.Context, id uint) (*Currency, error) {
@@ -54,8 +58,12 @@ func (s *Service) SetBaseCurrency(ctx context.Context, id uint) error {
 
 // ── Exchange Rates ────────────────────────────────────────────────────────────
 
-func (s *Service) ListExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time) ([]*ExchangeRate, error) {
-	return s.repo.ListExchangeRates(ctx, tenantID, fromCurrencyID, from, to)
+func (s *Service) CountExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time) (int64, error) {
+	return s.repo.CountExchangeRates(ctx, tenantID, fromCurrencyID, from, to)
+}
+
+func (s *Service) ListExchangeRates(ctx context.Context, tenantID uint, fromCurrencyID *uint, from, to *time.Time, limit, offset int) ([]*ExchangeRate, error) {
+	return s.repo.ListExchangeRates(ctx, tenantID, fromCurrencyID, from, to, limit, offset)
 }
 
 func (s *Service) GetLatestRates(ctx context.Context, tenantID uint) ([]*ExchangeRate, error) {
@@ -78,8 +86,12 @@ var validAccountTypes = map[string]bool{
 	"ASSET": true, "LIABILITY": true, "EQUITY": true, "REVENUE": true, "EXPENSE": true,
 }
 
-func (s *Service) ListCoA(ctx context.Context, tenantID uint) ([]*ChartOfAccount, error) {
-	return s.repo.ListCoA(ctx, tenantID)
+func (s *Service) CountCoA(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountCoA(ctx, tenantID)
+}
+
+func (s *Service) ListCoA(ctx context.Context, tenantID uint, limit, offset int) ([]*ChartOfAccount, error) {
+	return s.repo.ListCoA(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetCoA(ctx context.Context, id, tenantID uint) (*ChartOfAccount, error) {
@@ -117,8 +129,12 @@ func (s *Service) DeleteCoA(ctx context.Context, id, tenantID uint) error {
 
 // ── Cost Centers ──────────────────────────────────────────────────────────────
 
-func (s *Service) ListCostCenters(ctx context.Context, tenantID uint) ([]*CostCenter, error) {
-	return s.repo.ListCostCenters(ctx, tenantID)
+func (s *Service) CountCostCenters(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountCostCenters(ctx, tenantID)
+}
+
+func (s *Service) ListCostCenters(ctx context.Context, tenantID uint, limit, offset int) ([]*CostCenter, error) {
+	return s.repo.ListCostCenters(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetCostCenter(ctx context.Context, id, tenantID uint) (*CostCenter, error) {
@@ -141,8 +157,12 @@ func (s *Service) UpdateCostCenter(ctx context.Context, cc *CostCenter) error {
 
 // ── Payment Terms ─────────────────────────────────────────────────────────────
 
-func (s *Service) ListPaymentTerms(ctx context.Context, tenantID uint) ([]*PaymentTerm, error) {
-	return s.repo.ListPaymentTerms(ctx, tenantID)
+func (s *Service) CountPaymentTerms(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountPaymentTerms(ctx, tenantID)
+}
+
+func (s *Service) ListPaymentTerms(ctx context.Context, tenantID uint, limit, offset int) ([]*PaymentTerm, error) {
+	return s.repo.ListPaymentTerms(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetPaymentTerm(ctx context.Context, id, tenantID uint) (*PaymentTerm, error) {
@@ -165,8 +185,12 @@ func (s *Service) UpdatePaymentTerm(ctx context.Context, pt *PaymentTerm) error 
 
 // ── Banks ─────────────────────────────────────────────────────────────────────
 
-func (s *Service) ListBanks(ctx context.Context) ([]*Bank, error) {
-	return s.repo.ListBanks(ctx)
+func (s *Service) CountBanks(ctx context.Context) (int64, error) {
+	return s.repo.CountBanks(ctx)
+}
+
+func (s *Service) ListBanks(ctx context.Context, limit, offset int) ([]*Bank, error) {
+	return s.repo.ListBanks(ctx, limit, offset)
 }
 
 func (s *Service) CreateBank(ctx context.Context, b *Bank) error {
@@ -175,8 +199,12 @@ func (s *Service) CreateBank(ctx context.Context, b *Bank) error {
 
 // ── Company Bank Accounts ─────────────────────────────────────────────────────
 
-func (s *Service) ListBankAccounts(ctx context.Context, tenantID uint) ([]*CompanyBankAccount, error) {
-	return s.repo.ListBankAccounts(ctx, tenantID)
+func (s *Service) CountBankAccounts(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountBankAccounts(ctx, tenantID)
+}
+
+func (s *Service) ListBankAccounts(ctx context.Context, tenantID uint, limit, offset int) ([]*CompanyBankAccount, error) {
+	return s.repo.ListBankAccounts(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetBankAccount(ctx context.Context, id, tenantID uint) (*CompanyBankAccount, error) {
@@ -197,8 +225,12 @@ var validTaxTypes = map[string]bool{
 	"VAT": true, "WHT": true, "SVAT": true, "EXEMPT": true,
 }
 
-func (s *Service) ListTaxCodes(ctx context.Context, tenantID uint) ([]*TaxCode, error) {
-	return s.repo.ListTaxCodes(ctx, tenantID)
+func (s *Service) CountTaxCodes(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountTaxCodes(ctx, tenantID)
+}
+
+func (s *Service) ListTaxCodes(ctx context.Context, tenantID uint, limit, offset int) ([]*TaxCode, error) {
+	return s.repo.ListTaxCodes(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetTaxCode(ctx context.Context, id, tenantID uint) (*TaxCode, error) {
@@ -225,8 +257,12 @@ func (s *Service) UpdateTaxCode(ctx context.Context, t *TaxCode) error {
 
 // ── Tax Groups ────────────────────────────────────────────────────────────────
 
-func (s *Service) ListTaxGroups(ctx context.Context, tenantID uint) ([]*TaxGroup, error) {
-	return s.repo.ListTaxGroups(ctx, tenantID)
+func (s *Service) CountTaxGroups(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountTaxGroups(ctx, tenantID)
+}
+
+func (s *Service) ListTaxGroups(ctx context.Context, tenantID uint, limit, offset int) ([]*TaxGroup, error) {
+	return s.repo.ListTaxGroups(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetTaxGroup(ctx context.Context, id, tenantID uint) (*TaxGroup, error) {

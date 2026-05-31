@@ -41,12 +41,16 @@ func (h *Handler) ListParties(c *fiber.Ctx) error {
 	tenantID := tenantFromCtx(c)
 	partyType := c.Query("party_type")
 	activeOnly := c.Query("active_only") == "true"
-
-	rows, err := h.svc.ListParties(c.Context(), tenantID, partyType, activeOnly)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountParties(c.Context(), tenantID, partyType, activeOnly)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count parties")
+	}
+	rows, err := h.svc.ListParties(c.Context(), tenantID, partyType, activeOnly, limit, offset)
 	if err != nil {
 		return httputil.BadRequest(c, err.Error())
 	}
-	return httputil.Success(c, "parties retrieved", rows)
+	return httputil.SuccessWithMeta(c, "parties retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetParty(c *fiber.Ctx) error {

@@ -13,8 +13,12 @@ type Service struct{ repo Repository }
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
-func (s *Service) ListJobPositions(ctx context.Context, tenantID uint) ([]JobPosition, error) {
-	return s.repo.ListJobPositions(ctx, tenantID)
+func (s *Service) CountJobPositions(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountJobPositions(ctx, tenantID)
+}
+
+func (s *Service) ListJobPositions(ctx context.Context, tenantID uint, limit, offset int) ([]JobPosition, error) {
+	return s.repo.ListJobPositions(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) CreateJobPosition(ctx context.Context, tenantID uint, req *CreateJobPositionRequest) (*JobPosition, error) {
@@ -49,8 +53,12 @@ func (s *Service) UpdateJobPosition(ctx context.Context, tenantID, id uint, req 
 	return jp, s.repo.UpdateJobPosition(ctx, jp)
 }
 
-func (s *Service) ListEmployees(ctx context.Context, tenantID uint, activeOnly bool, departmentID *uint) ([]Employee, error) {
-	return s.repo.ListEmployees(ctx, tenantID, activeOnly, departmentID)
+func (s *Service) CountEmployees(ctx context.Context, tenantID uint, activeOnly bool, departmentID *uint) (int64, error) {
+	return s.repo.CountEmployees(ctx, tenantID, activeOnly, departmentID)
+}
+
+func (s *Service) ListEmployees(ctx context.Context, tenantID uint, activeOnly bool, departmentID *uint, limit, offset int) ([]Employee, error) {
+	return s.repo.ListEmployees(ctx, tenantID, activeOnly, departmentID, limit, offset)
 }
 
 func (s *Service) GetEmployee(ctx context.Context, tenantID, id uint) (*Employee, error) {

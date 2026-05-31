@@ -38,11 +38,17 @@ func validateStruct(v *validator.Validate, s interface{}) map[string]interface{}
 // ── Categories ────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListCategories(c *fiber.Ctx) error {
-	rows, err := h.svc.ListCategories(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountCategories(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count categories")
+	}
+	rows, err := h.svc.ListCategories(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list categories")
 	}
-	return httputil.Success(c, "categories retrieved", rows)
+	return httputil.SuccessWithMeta(c, "categories retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) CreateCategory(c *fiber.Ctx) error {
@@ -90,11 +96,17 @@ func (h *Handler) DeleteCategory(c *fiber.Ctx) error {
 // ── UOMs ──────────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListUOMs(c *fiber.Ctx) error {
-	rows, err := h.svc.ListUOMs(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountUOMs(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count UOMs")
+	}
+	rows, err := h.svc.ListUOMs(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list UOMs")
 	}
-	return httputil.Success(c, "UOMs retrieved", rows)
+	return httputil.SuccessWithMeta(c, "UOMs retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) CreateUOM(c *fiber.Ctx) error {
@@ -131,13 +143,19 @@ func (h *Handler) UpdateUOM(c *fiber.Ctx) error {
 // ── Products ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListProducts(c *fiber.Ctx) error {
+	tenantID := tenantFromCtx(c)
 	productType := c.Query("product_type")
 	activeOnly := c.Query("active_only") == "true"
-	rows, err := h.svc.ListProducts(c.Context(), tenantFromCtx(c), productType, activeOnly)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountProducts(c.Context(), tenantID, productType, activeOnly)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count products")
+	}
+	rows, err := h.svc.ListProducts(c.Context(), tenantID, productType, activeOnly, limit, offset)
 	if err != nil {
 		return httputil.BadRequest(c, err.Error())
 	}
-	return httputil.Success(c, "products retrieved", rows)
+	return httputil.SuccessWithMeta(c, "products retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetProduct(c *fiber.Ctx) error {

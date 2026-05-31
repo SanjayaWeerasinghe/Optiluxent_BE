@@ -105,6 +105,8 @@ services:
       CH_PASSWORD: ""
       # JWT
       JWT_SECRET: dev-secret-change-in-production
+      # Material categories
+      MM_CATEGORY_MAX_DEPTH: 5
     volumes:
       # Mount source code for hot-reload; node_modules / tmp are excluded
       - .:/app

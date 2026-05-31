@@ -7,7 +7,8 @@ import (
 )
 
 type Repository interface {
-	ListParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool) ([]Party, error)
+	CountParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool) (int64, error)
+	ListParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool, limit, offset int) ([]Party, error)
 	GetParty(ctx context.Context, tenantID, id uint) (*Party, error)
 	CreateParty(ctx context.Context, p *Party) error
 	UpdateParty(ctx context.Context, p *Party) error
@@ -30,13 +31,28 @@ type dbRepository struct{ db *gorm.DB }
 
 func NewRepository(db *gorm.DB) Repository { return &dbRepository{db: db} }
 
-func (r *dbRepository) ListParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool) ([]Party, error) {
+func (r *dbRepository) CountParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&Party{}).Where("tenant_id = ?", tenantID)
+	if partyType != "" {
+		q = q.Where("party_type = ? OR party_type = 'BOTH'", partyType)
+	}
+	if activeOnly {
+		q = q.Where("is_active = true")
+	}
+	var count int64
+	return count, q.Count(&count).Error
+}
+
+func (r *dbRepository) ListParties(ctx context.Context, tenantID uint, partyType string, activeOnly bool, limit, offset int) ([]Party, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if partyType != "" {
 		q = q.Where("party_type = ? OR party_type = 'BOTH'", partyType)
 	}
 	if activeOnly {
 		q = q.Where("is_active = true")
+	}
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
 	}
 	var rows []Party
 	return rows, q.Order("name").Find(&rows).Error
