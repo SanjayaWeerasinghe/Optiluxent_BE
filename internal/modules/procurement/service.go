@@ -311,6 +311,23 @@ func (s *Service) CreatePO(ctx context.Context, tenantID, userID uint, req *Crea
 		}
 		return nil, err
 	}
+	// Auto-create a draft Purchase Invoice so the expected bill exists from day one.
+	// Lines are populated later as GRNs are confirmed (actual received quantities).
+	if invCode, err := s.repo.NextCode(ctx, tenantID, "PURCHASE_INVOICE"); err == nil {
+		inv := &PurchaseInvoice{
+			TenantID:      tenantID,
+			Code:          invCode,
+			SupplierID:    po.SupplierID,
+			POID:          po.ID,
+			InvoiceDate:   d,
+			CurrencyID:    po.CurrencyID,
+			ExchangeRate:  er,
+			PaymentTermID: po.PaymentTermID,
+			Status:        InvStatusDraft,
+			CreatedBy:     &userID,
+		}
+		_ = s.repo.CreateInvoice(ctx, inv)
+	}
 	return po, nil
 }
 
@@ -365,22 +382,6 @@ func (s *Service) ConfirmPO(ctx context.Context, tenantID, id, userID uint) (*Pu
 	po.ConfirmedAt = &now
 	if err := s.repo.UpdatePO(ctx, po); err != nil {
 		return nil, err
-	}
-	// Auto-create a draft Purchase Invoice for this PO
-	if code, err := s.repo.NextCode(ctx, tenantID, "PURCHASE_INVOICE"); err == nil {
-		inv := &PurchaseInvoice{
-			TenantID:      tenantID,
-			Code:          code,
-			SupplierID:    po.SupplierID,
-			POID:          po.ID,
-			InvoiceDate:   today(),
-			CurrencyID:    po.CurrencyID,
-			ExchangeRate:  po.ExchangeRate,
-			PaymentTermID: po.PaymentTermID,
-			Status:        InvStatusDraft,
-			CreatedBy:     &userID,
-		}
-		_ = s.repo.CreateInvoice(ctx, inv)
 	}
 	return po, nil
 }
