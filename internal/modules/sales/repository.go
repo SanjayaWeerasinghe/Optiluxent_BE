@@ -41,6 +41,7 @@ type Repository interface {
 	CreateSI(ctx context.Context, si *SalesInvoice) error
 	ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesInvoice, error)
 	GetSI(ctx context.Context, tenantID, id uint) (*SalesInvoice, error)
+	GetDraftInvoiceBySOID(ctx context.Context, tenantID, soID uint) (*SalesInvoice, error)
 	UpdateSI(ctx context.Context, si *SalesInvoice) error
 	AddSILine(ctx context.Context, line *SILine) error
 	GetSILine(ctx context.Context, tenantID, invoiceID, lineID uint) (*SILine, error)
@@ -343,6 +344,15 @@ func (r *dbRepository) GetSI(ctx context.Context, tenantID, id uint) (*SalesInvo
 	var si SalesInvoice
 	err := r.db.WithContext(ctx).Preload("Lines").
 		Where("tenant_id = ? AND id = ?", tenantID, id).First(&si).Error
+	return &si, err
+}
+
+// GetDraftInvoiceBySOID returns the most recent DRAFT invoice for an SO.
+func (r *dbRepository) GetDraftInvoiceBySOID(ctx context.Context, tenantID, soID uint) (*SalesInvoice, error) {
+	var si SalesInvoice
+	err := r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND so_id = ? AND status = ?", tenantID, soID, SIStatusDraft).
+		Order("created_at DESC").First(&si).Error
 	return &si, err
 }
 

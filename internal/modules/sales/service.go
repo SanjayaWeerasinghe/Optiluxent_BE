@@ -124,6 +124,23 @@ func (s *Service) CreateSO(ctx context.Context, tenantID, userID uint, req Creat
 		}
 		return nil, err
 	}
+	// Auto-create a draft Sales Invoice so the expected bill exists from day one.
+	// Lines are populated later as DOs are confirmed (actual delivered quantities).
+	if invCode, err := s.repo.NextSICode(ctx, tenantID); err == nil {
+		si := &SalesInvoice{
+			TenantID:      tenantID,
+			Code:          invCode,
+			CustomerID:    so.CustomerID,
+			SOID:          so.ID,
+			InvoiceDate:   d,
+			CurrencyID:    so.CurrencyID,
+			ExchangeRate:  er,
+			PaymentTermID: so.PaymentTermID,
+			Status:        SIStatusDraft,
+			CreatedBy:     &userID,
+		}
+		_ = s.repo.CreateSI(ctx, si)
+	}
 	return so, nil
 }
 
@@ -358,7 +375,61 @@ func (s *Service) ConfirmDO(ctx context.Context, tenantID, userID, doID uint) er
 	if len(do.Lines) == 0 {
 		return fmt.Errorf("delivery order must have at least one item")
 	}
-	return s.repo.ConfirmDO(ctx, tenantID, doID, userID, time.Now())
+	if err := s.repo.ConfirmDO(ctx, tenantID, doID, userID, time.Now()); err != nil {
+		return err
+	}
+	// Auto-append DO lines to the SO's draft invoice
+	if do.SOID != nil {
+		s.appendDOLinesToDraftInvoice(ctx, tenantID, do)
+	}
+	return nil
+}
+
+// appendDOLinesToDraftInvoice adds lines from a confirmed DO to the SO's draft invoice.
+// Prices are sourced from SO lines; falls back to 0 if no SO line is linked.
+// Best-effort — failures do not roll back the DO confirmation.
+func (s *Service) appendDOLinesToDraftInvoice(ctx context.Context, tenantID uint, do *DeliveryOrder) {
+	if do.SOID == nil {
+		return
+	}
+	si, err := s.repo.GetDraftInvoiceBySOID(ctx, tenantID, *do.SOID)
+	if err != nil {
+		return // no draft invoice — nothing to append to
+	}
+	nextLine := len(si.Lines) + 1
+	for _, doLine := range do.Lines {
+		var unitPrice float64
+		var taxCodeID *uint
+		var discountPct float64
+		if doLine.SOLineID != nil {
+			if soLine, err := s.repo.GetSOLine(ctx, tenantID, *do.SOID, *doLine.SOLineID); err == nil {
+				unitPrice = soLine.UnitPrice
+				taxCodeID = soLine.TaxCodeID
+				discountPct = soLine.DiscountPct
+			}
+		}
+		doLineID := doLine.ID
+		line := &SILine{
+			InvoiceID:   si.ID,
+			TenantID:    tenantID,
+			DOLineID:    &doLineID,
+			LineNumber:  nextLine,
+			ProductID:   doLine.ProductID,
+			VariantID:   doLine.VariantID,
+			Quantity:    doLine.Quantity,
+			UOMID:       doLine.UOMID,
+			UnitPrice:   unitPrice,
+			DiscountPct: discountPct,
+			TaxCodeID:   taxCodeID,
+		}
+		line.LineTotal = siLineTotal(line)
+		if err := s.repo.AddSILine(ctx, line); err == nil {
+			si.Lines = append(si.Lines, *line)
+			nextLine++
+		}
+	}
+	calcSITotals(si)
+	_ = s.repo.UpdateSI(ctx, si)
 }
 
 // ── DO Lines ──────────────────────────────────────────────────────────────────
