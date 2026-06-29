@@ -218,7 +218,7 @@ func (r *dbRepository) CompleteOrder(ctx context.Context, tenantID, orderID, use
 			return fmt.Errorf("production order is not IN_PROGRESS")
 		}
 
-		// Debit MATERIAL resources from stock
+		// Debit MATERIAL resources from stock (consumption is unconditional)
 		for _, res := range order.Resources {
 			if res.ResourceType == ResourceTypeMaterial && res.ProductID != nil {
 				if err := upsertStockBalance(tx, tenantID, *res.ProductID, nil, order.WarehouseID, nil, -res.Quantity); err != nil {
@@ -227,16 +227,11 @@ func (r *dbRepository) CompleteOrder(ctx context.Context, tenantID, orderID, use
 			}
 		}
 
-		// Credit outputs to stock
+		// Outputs are NOT credited to stock here — they are gated on Product QC
+		// passing (inventory.SubmitQualityCheck posts qty_passed to stock_balances).
+		// We still track totalProduced for the order's produced_qty field.
 		var totalProduced float64
 		for _, out := range order.Outputs {
-			warehouseID := order.WarehouseID
-			if out.WarehouseID != nil {
-				warehouseID = *out.WarehouseID
-			}
-			if err := upsertStockBalance(tx, tenantID, out.ProductID, nil, warehouseID, out.LocationID, out.Quantity); err != nil {
-				return fmt.Errorf("failed to credit output %d: %w", out.ProductID, err)
-			}
 			totalProduced += out.Quantity
 		}
 

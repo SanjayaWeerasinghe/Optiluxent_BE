@@ -12,13 +12,35 @@ import (
 	"github.com/google/uuid"
 )
 
+// QCAutoCreator is the minimal interface procurement needs from the inventory module
+// to spin up a Material QC when a WITH_PO / WITHOUT_PO GRN is confirmed.
+// inventory.Service satisfies this via its CreateAutoQC method.
+type QCAutoLine struct {
+	ProductID uint
+	VariantID *uint
+	Quantity  float64
+}
+
+type QCAutoCreator interface {
+	CreateAutoQC(
+		ctx context.Context,
+		tenantID, userID uint,
+		qcType, refType string,
+		refID, warehouseID uint,
+		notes string,
+		lines []QCAutoLine,
+	) error
+}
+
 type Service struct {
 	repo Repository
 	bus  events.EventBus
+	qc   QCAutoCreator
 }
 
 func NewService(repo Repository) *Service                      { return &Service{repo: repo} }
 func (s *Service) SetEventBus(bus events.EventBus)             { s.bus = bus }
+func (s *Service) SetQCAutoCreator(qc QCAutoCreator)           { s.qc = qc }
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {
@@ -518,9 +540,18 @@ func (s *Service) CreateGRN(ctx context.Context, tenantID, userID uint, req *Cre
 	if d == "" {
 		d = today()
 	}
+	grnType := req.GRNType
+	if grnType == "" {
+		if req.POID != nil {
+			grnType = GRNTypeWithPO
+		} else {
+			grnType = GRNTypeWithoutPO
+		}
+	}
 	grn := &GoodsReceipt{
 		TenantID:    tenantID,
 		Code:        code,
+		GRNType:     grnType,
 		POID:        req.POID,
 		SupplierID:  req.SupplierID,
 		ReceiptDate: d,
@@ -549,6 +580,22 @@ func (s *Service) ConfirmGRN(ctx context.Context, tenantID, id, userID uint) err
 	// Auto-append GRN lines to the PO's draft invoice
 	if grn.POID != nil {
 		s.appendGRNLinesToDraftInvoice(ctx, tenantID, grn)
+	}
+	// Auto-create a Material QC for WITH_PO / WITHOUT_PO GRNs.
+	// Customer/Production returns don't go through QC.
+	if s.qc != nil && (grn.GRNType == GRNTypeWithPO || grn.GRNType == GRNTypeWithoutPO) {
+		lines := make([]QCAutoLine, 0, len(grn.Lines))
+		for _, gl := range grn.Lines {
+			lines = append(lines, QCAutoLine{
+				ProductID: gl.ProductID,
+				VariantID: gl.VariantID,
+				Quantity:  gl.Quantity,
+			})
+		}
+		_ = s.qc.CreateAutoQC(ctx, tenantID, userID,
+			"MATERIAL_QC", "GRN", grn.ID, grn.WarehouseID,
+			"Auto-created from "+grn.Code+" ("+grn.GRNType+")",
+			lines)
 	}
 	return nil
 }

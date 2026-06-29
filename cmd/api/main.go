@@ -192,6 +192,16 @@ func main() {
 	}
 	logger.Info("Module registry initialised")
 
+	// ── Cross-module wiring ─────────────────────────────────────────────────────
+	// Procurement (GRN confirm) and Manufacturing (output add) need to auto-create
+	// QualityCheck entries owned by Inventory. Wire adapters that bridge the
+	// per-package QCAutoLine types to inventory's CreateAutoQC.
+	if invSvc := invModule.Service(); invSvc != nil {
+		procModule.Service().SetQCAutoCreator(procQCAdapter{inv: invSvc})
+		mfgModule.Service().SetQCAutoCreator(mfgQCAdapter{inv: invSvc})
+		logger.Info("QC auto-creator wired into procurement and manufacturing")
+	}
+
 	logger.Info("All components initialised")
 
 	// ── HTTP server ─────────────────────────────────────────────────────────────
@@ -232,4 +242,43 @@ func main() {
 	}
 
 	logger.Info("ERP System shutdown complete")
+}
+
+// procQCAdapter satisfies procurement.QCAutoCreator by translating procurement's
+// QCAutoLine slice into inventory's QCAutoLine slice and delegating to invSvc.
+type procQCAdapter struct{ inv *inventory.Service }
+
+func (a procQCAdapter) CreateAutoQC(
+	ctx context.Context,
+	tenantID, userID uint,
+	qcType, refType string,
+	refID, warehouseID uint,
+	notes string,
+	lines []procurement.QCAutoLine,
+) error {
+	out := make([]inventory.QCAutoLine, len(lines))
+	for i, l := range lines {
+		out[i] = inventory.QCAutoLine{ProductID: l.ProductID, VariantID: l.VariantID, Quantity: l.Quantity}
+	}
+	_, err := a.inv.CreateAutoQC(ctx, tenantID, userID, qcType, refType, refID, warehouseID, notes, out)
+	return err
+}
+
+// mfgQCAdapter does the same for manufacturing.QCAutoCreator.
+type mfgQCAdapter struct{ inv *inventory.Service }
+
+func (a mfgQCAdapter) CreateAutoQC(
+	ctx context.Context,
+	tenantID, userID uint,
+	qcType, refType string,
+	refID, warehouseID uint,
+	notes string,
+	lines []manufacturing.QCAutoLine,
+) error {
+	out := make([]inventory.QCAutoLine, len(lines))
+	for i, l := range lines {
+		out[i] = inventory.QCAutoLine{ProductID: l.ProductID, VariantID: l.VariantID, Quantity: l.Quantity}
+	}
+	_, err := a.inv.CreateAutoQC(ctx, tenantID, userID, qcType, refType, refID, warehouseID, notes, out)
+	return err
 }

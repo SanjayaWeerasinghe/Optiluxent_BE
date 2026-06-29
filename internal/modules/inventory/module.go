@@ -26,6 +26,10 @@ func New(enforcer rbac.Enforcer, auditLogger *auditinfra.Logger) *Module {
 func (m *Module) Name() string           { return "inventory" }
 func (m *Module) Dependencies() []string { return []string{"masterdata"} }
 
+// Service returns the underlying inventory service so other modules can
+// invoke cross-module operations (e.g. QC auto-creation from procurement/manufacturing).
+func (m *Module) Service() *Service { return m.svc }
+
 func (m *Module) Initialize(deps modules.Dependencies) error {
 	m.svc = NewService(NewRepository(deps.DB, deps.LedgerDB))
 	return nil

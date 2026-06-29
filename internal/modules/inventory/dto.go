@@ -152,6 +152,7 @@ type UpdateAdjustmentLineRequest struct {
 // ── Quality Check DTOs ────────────────────────────────────────────────────────
 
 type CreateQualityCheckRequest struct {
+	QCType        string `json:"qc_type"        validate:"omitempty,oneof=MATERIAL_QC PRODUCT_QC"`
 	ReferenceType string `json:"reference_type"`
 	ReferenceID   *uint  `json:"reference_id"`
 	WarehouseID   uint   `json:"warehouse_id"  validate:"required"`

@@ -217,10 +217,17 @@ const (
 	QCStatusPartial    = "PARTIAL"
 )
 
+// QC types — distinguish inspection of inbound goods vs production output.
+const (
+	QCTypeMaterial = "MATERIAL_QC" // inbound goods inspection (linked to GRN)
+	QCTypeProduct  = "PRODUCT_QC"  // production output inspection (linked to Production Output)
+)
+
 type QualityCheck struct {
 	ID            uint      `json:"id"             gorm:"primaryKey"`
 	TenantID      uint      `json:"tenant_id"      gorm:"not null;index"`
 	Code          string    `json:"code"           gorm:"not null;size:50"`
+	QCType        string    `json:"qc_type"        gorm:"not null;size:30;default:MATERIAL_QC"`
 	ReferenceType string    `json:"reference_type" gorm:"size:50"`
 	ReferenceID   *uint     `json:"reference_id"`
 	WarehouseID   uint      `json:"warehouse_id"   gorm:"not null"`

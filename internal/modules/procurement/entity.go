@@ -129,10 +129,19 @@ const (
 	GRNStatusCancelled = "CANCELLED"
 )
 
+// GRN types — determines downstream behaviour like QC auto-creation.
+const (
+	GRNTypeWithPO            = "WITH_PO"            // standard supplier delivery against a PO → Material QC
+	GRNTypeWithoutPO         = "WITHOUT_PO"         // ad-hoc supplier delivery (no PO) → Material QC
+	GRNTypeCustomerReturn    = "CUSTOMER_RETURN"    // goods returned by customer → no QC
+	GRNTypeProductionReturn  = "PRODUCTION_RETURN"  // goods returned from production floor → no QC
+)
+
 type GoodsReceipt struct {
 	ID          uint           `json:"id"           gorm:"primaryKey"`
 	TenantID    uint           `json:"tenant_id"    gorm:"not null;index"`
 	Code        string         `json:"code"         gorm:"not null;size:50"`
+	GRNType     string         `json:"grn_type"     gorm:"not null;size:30;default:WITH_PO"`
 	POID        *uint          `json:"po_id"`
 	SupplierID  uint           `json:"supplier_id"  gorm:"not null"`
 	ReceiptDate string         `json:"receipt_date" gorm:"type:date;not null"`

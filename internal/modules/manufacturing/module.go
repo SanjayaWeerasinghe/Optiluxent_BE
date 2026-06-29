@@ -31,7 +31,11 @@ func New(enforcer rbac.Enforcer, auditLogger *auditinfra.Logger) *Module {
 }
 
 func (m *Module) Name() string           { return "manufacturing" }
-func (m *Module) Dependencies() []string { return []string{"masterdata"} }
+func (m *Module) Dependencies() []string { return []string{"masterdata", "inventory"} }
+
+// Service returns the underlying manufacturing service so wiring code (main.go)
+// can inject cross-module collaborators like the QC auto-creator.
+func (m *Module) Service() *Service { return m.svc }
 
 func (m *Module) Initialize(deps modules.Dependencies) error {
 	m.svc = NewService(NewRepository(deps.DB))

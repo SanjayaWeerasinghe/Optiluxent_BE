@@ -267,6 +267,9 @@ func (r *dbRepository) ConfirmGRN(ctx context.Context, tenantID, grnID uint, con
 		if err := tx.Save(&grn).Error; err != nil {
 			return err
 		}
+		// Gate stock posting on grn_type: WITH_PO and WITHOUT_PO must pass QC first.
+		// CUSTOMER_RETURN and PRODUCTION_RETURN post immediately (no QC).
+		postStockNow := grn.GRNType != GRNTypeWithPO && grn.GRNType != GRNTypeWithoutPO
 		for _, line := range grn.Lines {
 			ratio := line.TransferRatio
 			if ratio <= 0 {
@@ -283,28 +286,32 @@ func (r *dbRepository) ConfirmGRN(ctx context.Context, tenantID, grnID uint, con
 			if line.LocationID != nil {
 				locationID = uint64(*line.LocationID)
 			}
-			ledgerRows = append(ledgerRows, stockLedgerRow{
-				productID:   uint64(line.ProductID),
-				variantID:   variantID,
-				warehouseID: uint64(grn.WarehouseID),
-				locationID:  locationID,
-				qty:         stockQty,
-				unitCost:    stockUnitCost,
-				total:       stockTotal,
-				date:        grn.ReceiptDate,
-			})
+			if postStockNow {
+				ledgerRows = append(ledgerRows, stockLedgerRow{
+					productID:   uint64(line.ProductID),
+					variantID:   variantID,
+					warehouseID: uint64(grn.WarehouseID),
+					locationID:  locationID,
+					qty:         stockQty,
+					unitCost:    stockUnitCost,
+					total:       stockTotal,
+					date:        grn.ReceiptDate,
+				})
 
-			if err := tx.Exec(`
-				INSERT INTO stock_balances
-					(tenant_id, product_id, variant_id, warehouse_id, location_id, quantity, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, NOW())
-				ON CONFLICT ON CONSTRAINT uidx_stock_balances
-				DO UPDATE SET quantity = stock_balances.quantity + EXCLUDED.quantity, updated_at = NOW()`,
-				tenantID, line.ProductID, line.VariantID, grn.WarehouseID, line.LocationID, stockQty,
-			).Error; err != nil {
-				return err
+				if err := tx.Exec(`
+					INSERT INTO stock_balances
+						(tenant_id, product_id, variant_id, warehouse_id, location_id, quantity, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, NOW())
+					ON CONFLICT ON CONSTRAINT uidx_stock_balances
+					DO UPDATE SET quantity = stock_balances.quantity + EXCLUDED.quantity, updated_at = NOW()`,
+					tenantID, line.ProductID, line.VariantID, grn.WarehouseID, line.LocationID, stockQty,
+				).Error; err != nil {
+					return err
+				}
 			}
 
+			// Always update PO line received_qty — physical receipt has happened
+			// even though stock is held in QC limbo until passed.
 			if line.POLineID != nil {
 				tx.Exec(`UPDATE purchase_order_lines SET received_qty = received_qty + ? WHERE id = ?`,
 					line.Quantity, *line.POLineID)

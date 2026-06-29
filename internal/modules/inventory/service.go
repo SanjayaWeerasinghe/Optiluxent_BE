@@ -602,9 +602,14 @@ func (s *Service) CreateQualityCheck(ctx context.Context, tenantID, userID uint,
 	if d == "" {
 		d = today()
 	}
+	qcType := req.QCType
+	if qcType == "" {
+		qcType = QCTypeMaterial
+	}
 	qc := &QualityCheck{
 		TenantID:      tenantID,
 		Code:          code,
+		QCType:        qcType,
 		ReferenceType: req.ReferenceType,
 		ReferenceID:   req.ReferenceID,
 		WarehouseID:   req.WarehouseID,
@@ -709,6 +714,66 @@ func (s *Service) UpdateQCLine(ctx context.Context, tenantID, checkID, lineID ui
 	line.RejectionReason = req.RejectionReason
 	line.Notes = req.Notes
 	return line, s.repo.UpdateQCLine(ctx, line)
+}
+
+// ── Auto-QC creation (called by other modules) ────────────────────────────────
+
+// QCAutoLine is a minimal product+qty pair used by other modules to create QC lines
+// when they trigger an auto-QC (e.g. procurement on GRN confirm, manufacturing on output).
+type QCAutoLine struct {
+	ProductID uint
+	VariantID *uint
+	Quantity  float64
+}
+
+// CreateAutoQC creates a PENDING QualityCheck with the supplied lines.
+// Used by other modules to trigger QC from cross-module events (GRN confirm, production output).
+// Failures are returned but callers typically treat them as non-fatal.
+func (s *Service) CreateAutoQC(
+	ctx context.Context,
+	tenantID, userID uint,
+	qcType, refType string,
+	refID, warehouseID uint,
+	notes string,
+	lines []QCAutoLine,
+) (*QualityCheck, error) {
+	if qcType == "" {
+		qcType = QCTypeMaterial
+	}
+	code, err := s.repo.NextCode(ctx, tenantID, "QUALITY_CHECK")
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate QC code: %w", err)
+	}
+	qc := &QualityCheck{
+		TenantID:      tenantID,
+		Code:          code,
+		QCType:        qcType,
+		ReferenceType: refType,
+		ReferenceID:   &refID,
+		WarehouseID:   warehouseID,
+		CheckDate:     today(),
+		Status:        QCStatusPending,
+		Notes:         notes,
+		CreatedBy:     userID,
+	}
+	if err := s.repo.CreateQualityCheck(ctx, qc); err != nil {
+		return nil, err
+	}
+	for i, l := range lines {
+		line := &QCLine{
+			TenantID:   tenantID,
+			CheckID:    qc.ID,
+			LineNumber: i + 1,
+			ProductID:  l.ProductID,
+			VariantID:  l.VariantID,
+			QtyChecked: l.Quantity,
+			Result:     QCStatusPending,
+		}
+		if err := s.repo.AddQCLine(ctx, line); err != nil {
+			return qc, fmt.Errorf("QC %d created but line %d failed: %w", qc.ID, i+1, err)
+		}
+	}
+	return qc, nil
 }
 
 // ── Stock Balances ────────────────────────────────────────────────────────────
