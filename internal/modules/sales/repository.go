@@ -10,6 +10,19 @@ import (
 )
 
 type Repository interface {
+	// Sales Quotations
+	NextSQCode(ctx context.Context, tenantID uint) (string, error)
+	CreateSQ(ctx context.Context, sq *SalesQuotation) error
+	ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesQuotation, error)
+	GetSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error)
+	UpdateSQ(ctx context.Context, sq *SalesQuotation) error
+	DeleteSQ(ctx context.Context, tenantID, id uint) error
+	AddSQLine(ctx context.Context, line *SQLine) error
+	GetSQLine(ctx context.Context, tenantID, sqID, lineID uint) (*SQLine, error)
+	ListSQLines(ctx context.Context, tenantID, sqID uint) ([]SQLine, error)
+	UpdateSQLine(ctx context.Context, line *SQLine) error
+	DeleteSQLine(ctx context.Context, tenantID, sqID, lineID uint) error
+
 	// Sales Orders
 	NextSOCode(ctx context.Context, tenantID uint) (string, error)
 	CreateSO(ctx context.Context, so *SalesOrder) error
@@ -93,6 +106,74 @@ func (r *dbRepository) NextDOCode(ctx context.Context, tenantID uint) (string, e
 
 func (r *dbRepository) NextSICode(ctx context.Context, tenantID uint) (string, error) {
 	return r.nextCode(ctx, tenantID, "SALES_INVOICE")
+}
+
+func (r *dbRepository) NextSQCode(ctx context.Context, tenantID uint) (string, error) {
+	return r.nextCode(ctx, tenantID, "SALES_QUOTATION")
+}
+
+// ── Sales Quotations ──────────────────────────────────────────────────────────
+
+func (r *dbRepository) CreateSQ(ctx context.Context, sq *SalesQuotation) error {
+	return r.db.WithContext(ctx).Create(sq).Error
+}
+
+func (r *dbRepository) ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesQuotation, error) {
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if customerID != nil {
+		q = q.Where("customer_id = ?", *customerID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var rows []SalesQuotation
+	return rows, q.Order("created_at DESC").Find(&rows).Error
+}
+
+func (r *dbRepository) GetSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error) {
+	var sq SalesQuotation
+	err := r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND id = ?", tenantID, id).First(&sq).Error
+	return &sq, err
+}
+
+func (r *dbRepository) UpdateSQ(ctx context.Context, sq *SalesQuotation) error {
+	return r.db.WithContext(ctx).Save(sq).Error
+}
+
+func (r *dbRepository) DeleteSQ(ctx context.Context, tenantID, id uint) error {
+	return r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).Delete(&SalesQuotation{}).Error
+}
+
+// ── SQ Lines ──────────────────────────────────────────────────────────────────
+
+func (r *dbRepository) AddSQLine(ctx context.Context, line *SQLine) error {
+	return r.db.WithContext(ctx).Create(line).Error
+}
+
+func (r *dbRepository) GetSQLine(ctx context.Context, tenantID, sqID, lineID uint) (*SQLine, error) {
+	var line SQLine
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND sq_id = ? AND id = ?", tenantID, sqID, lineID).
+		First(&line).Error
+	return &line, err
+}
+
+func (r *dbRepository) ListSQLines(ctx context.Context, tenantID, sqID uint) ([]SQLine, error) {
+	var rows []SQLine
+	return rows, r.db.WithContext(ctx).
+		Where("tenant_id = ? AND sq_id = ?", tenantID, sqID).
+		Order("line_number").Find(&rows).Error
+}
+
+func (r *dbRepository) UpdateSQLine(ctx context.Context, line *SQLine) error {
+	return r.db.WithContext(ctx).Save(line).Error
+}
+
+func (r *dbRepository) DeleteSQLine(ctx context.Context, tenantID, sqID, lineID uint) error {
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND sq_id = ? AND id = ?", tenantID, sqID, lineID).
+		Delete(&SQLine{}).Error
 }
 
 // ── Sales Orders ──────────────────────────────────────────────────────────────

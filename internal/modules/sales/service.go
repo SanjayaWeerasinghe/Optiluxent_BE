@@ -77,6 +77,336 @@ func calcSITotals(si *SalesInvoice) {
 	si.TotalAmount = sub + tax - si.DiscountAmount
 }
 
+func sqLineTotal(line *SQLine) float64 {
+	return line.Quantity * line.UnitPrice * (1 - line.DiscountPct/100)
+}
+
+func calcSQTotals(sq *SalesQuotation) {
+	var sub, tax float64
+	for _, l := range sq.Lines {
+		sub += l.LineTotal
+		tax += l.TaxAmount
+	}
+	sq.Subtotal = sub
+	sq.TaxAmount = tax
+	sq.TotalAmount = sub + tax - sq.DiscountAmount
+}
+
+// ── Sales Quotations ──────────────────────────────────────────────────────────
+
+func (s *Service) ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesQuotation, error) {
+	return s.repo.ListSQs(ctx, tenantID, customerID, status)
+}
+
+func (s *Service) GetSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error) {
+	return s.repo.GetSQ(ctx, tenantID, id)
+}
+
+func (s *Service) CreateSQ(ctx context.Context, tenantID, userID uint, req CreateSQRequest) (*SalesQuotation, error) {
+	code := req.Code
+	if code == "" {
+		var err error
+		code, err = s.repo.NextSQCode(ctx, tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate SQ code: %w", err)
+		}
+	}
+	d := req.QuotationDate
+	if d == "" {
+		d = today()
+	}
+	er := req.ExchangeRate
+	if er == 0 {
+		er = 1
+	}
+	sq := &SalesQuotation{
+		TenantID:           tenantID,
+		Code:               code,
+		CustomerID:         req.CustomerID,
+		QuotationDate:      d,
+		ValidUntil:         req.ValidUntil,
+		CurrencyID:         req.CurrencyID,
+		ExchangeRate:       er,
+		PaymentTermID:      req.PaymentTermID,
+		WarehouseID:        req.WarehouseID,
+		Status:             SQStatusDraft,
+		CustomerReference:  req.CustomerReference,
+		TermsAndConditions: req.TermsAndConditions,
+		Notes:              req.Notes,
+		CreatedBy:          &userID,
+	}
+	if err := s.repo.CreateSQ(ctx, sq); err != nil {
+		if isDuplicate(err) {
+			return nil, fmt.Errorf("quotation code '%s' already exists", code)
+		}
+		return nil, err
+	}
+	return sq, nil
+}
+
+func (s *Service) UpdateSQ(ctx context.Context, tenantID, id uint, req UpdateSQRequest) (*SalesQuotation, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, id)
+	if err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusDraft {
+		return nil, fmt.Errorf("only DRAFT quotations can be edited")
+	}
+	sq.ValidUntil = req.ValidUntil
+	sq.PaymentTermID = req.PaymentTermID
+	if req.ExchangeRate != nil {
+		sq.ExchangeRate = *req.ExchangeRate
+	}
+	if req.DiscountAmount != nil {
+		sq.DiscountAmount = *req.DiscountAmount
+	}
+	if req.CustomerReference != "" {
+		sq.CustomerReference = req.CustomerReference
+	}
+	if req.TermsAndConditions != "" {
+		sq.TermsAndConditions = req.TermsAndConditions
+	}
+	if req.Notes != "" {
+		sq.Notes = req.Notes
+	}
+	calcSQTotals(sq)
+	return sq, s.repo.UpdateSQ(ctx, sq)
+}
+
+func (s *Service) DeleteSQ(ctx context.Context, tenantID, id uint) error {
+	sq, err := s.repo.GetSQ(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusDraft {
+		return fmt.Errorf("only DRAFT quotations can be deleted")
+	}
+	return s.repo.DeleteSQ(ctx, tenantID, id)
+}
+
+func (s *Service) SubmitSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, id)
+	if err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusDraft {
+		return nil, fmt.Errorf("only DRAFT quotations can be sent")
+	}
+	if len(sq.Lines) == 0 {
+		return nil, fmt.Errorf("quotation must have at least one item")
+	}
+	sq.Status = SQStatusSent
+	return sq, s.repo.UpdateSQ(ctx, sq)
+}
+
+// AcceptSQ transitions a SENT quotation to ACCEPTED and creates a Sales Order
+// with the same lines. The new SO carries sq_id as a back-reference so users
+// can drill through.
+func (s *Service) AcceptSQ(ctx context.Context, tenantID, userID, id uint) (*SalesQuotation, *SalesOrder, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusSent {
+		return nil, nil, fmt.Errorf("only SENT quotations can be accepted")
+	}
+	// Generate an SO code and build the new SO
+	soCode, err := s.repo.NextSOCode(ctx, tenantID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate SO code: %w", err)
+	}
+	sqID := sq.ID
+	so := &SalesOrder{
+		TenantID:      tenantID,
+		Code:          soCode,
+		SQID:          &sqID,
+		CustomerID:    sq.CustomerID,
+		OrderDate:     today(),
+		CurrencyID:    sq.CurrencyID,
+		ExchangeRate:  sq.ExchangeRate,
+		PaymentTermID: sq.PaymentTermID,
+		WarehouseID:   sq.WarehouseID,
+		Status:        SOStatusDraft,
+		Notes:         sq.Notes,
+		CreatedBy:     &userID,
+	}
+	if err := s.repo.CreateSO(ctx, so); err != nil {
+		return nil, nil, err
+	}
+	// Copy each SQ line to the new SO
+	for i, sl := range sq.Lines {
+		soLine := &SOLine{
+			SOID:        so.ID,
+			TenantID:    tenantID,
+			LineNumber:  i + 1,
+			ProductID:   sl.ProductID,
+			VariantID:   sl.VariantID,
+			Description: sl.Description,
+			Quantity:    sl.Quantity,
+			UOMID:       sl.UOMID,
+			UnitPrice:   sl.UnitPrice,
+			DiscountPct: sl.DiscountPct,
+			TaxCodeID:   sl.TaxCodeID,
+			TaxAmount:   sl.TaxAmount,
+			LineTotal:   sl.LineTotal,
+			Notes:       sl.Notes,
+		}
+		if err := s.repo.AddSOLine(ctx, soLine); err != nil {
+			return nil, nil, err
+		}
+		so.Lines = append(so.Lines, *soLine)
+	}
+	calcSOTotals(so)
+	if err := s.repo.UpdateSO(ctx, so); err != nil {
+		return nil, nil, err
+	}
+	// Mirror the procurement/sales pattern: creating an SO already spins up a
+	// draft SI header (see CreateSO). Since we called repo.CreateSO directly
+	// here (bypassing the service), do the same auto-invoice manually so the
+	// flow stays consistent.
+	if invCode, err := s.repo.NextSICode(ctx, tenantID); err == nil {
+		_ = s.repo.CreateSI(ctx, &SalesInvoice{
+			TenantID:      tenantID,
+			Code:          invCode,
+			CustomerID:    so.CustomerID,
+			SOID:          so.ID,
+			InvoiceDate:   today(),
+			CurrencyID:    so.CurrencyID,
+			ExchangeRate:  so.ExchangeRate,
+			PaymentTermID: so.PaymentTermID,
+			Status:        SIStatusDraft,
+			CreatedBy:     &userID,
+		})
+	}
+	// Mark the SQ as ACCEPTED and back-link
+	now := time.Now()
+	sq.Status = SQStatusAccepted
+	sq.AcceptedBy = &userID
+	sq.AcceptedAt = &now
+	sq.ConvertedSOID = &so.ID
+	if err := s.repo.UpdateSQ(ctx, sq); err != nil {
+		return nil, nil, err
+	}
+	return sq, so, nil
+}
+
+func (s *Service) RejectSQ(ctx context.Context, tenantID, userID, id uint) (*SalesQuotation, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, id)
+	if err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusSent {
+		return nil, fmt.Errorf("only SENT quotations can be rejected")
+	}
+	sq.Status = SQStatusRejected
+	sq.RejectedBy = &userID
+	return sq, s.repo.UpdateSQ(ctx, sq)
+}
+
+func (s *Service) CancelSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, id)
+	if err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status == SQStatusAccepted || sq.Status == SQStatusCancelled {
+		return nil, fmt.Errorf("cannot cancel a %s quotation", sq.Status)
+	}
+	sq.Status = SQStatusCancelled
+	return sq, s.repo.UpdateSQ(ctx, sq)
+}
+
+// ── SQ Lines ──────────────────────────────────────────────────────────────────
+
+func (s *Service) ListSQLines(ctx context.Context, tenantID, sqID uint) ([]SQLine, error) {
+	if _, err := s.repo.GetSQ(ctx, tenantID, sqID); err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	return s.repo.ListSQLines(ctx, tenantID, sqID)
+}
+
+func (s *Service) GetSQLine(ctx context.Context, tenantID, sqID, lineID uint) (*SQLine, error) {
+	return s.repo.GetSQLine(ctx, tenantID, sqID, lineID)
+}
+
+func (s *Service) AddSQLine(ctx context.Context, tenantID, sqID uint, req AddSQLineRequest) (*SQLine, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, sqID)
+	if err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusDraft {
+		return nil, fmt.Errorf("cannot add items to a %s quotation", sq.Status)
+	}
+	line := &SQLine{
+		SQID:        sqID,
+		TenantID:    tenantID,
+		LineNumber:  len(sq.Lines) + 1,
+		ProductID:   req.ProductID,
+		VariantID:   req.VariantID,
+		Description: req.Description,
+		Quantity:    req.Quantity,
+		UOMID:       req.UOMID,
+		UnitPrice:   req.UnitPrice,
+		DiscountPct: req.DiscountPct,
+		TaxCodeID:   req.TaxCodeID,
+		Notes:       req.Notes,
+	}
+	line.LineTotal = sqLineTotal(line)
+	if err := s.repo.AddSQLine(ctx, line); err != nil {
+		return nil, err
+	}
+	sq.Lines = append(sq.Lines, *line)
+	calcSQTotals(sq)
+	_ = s.repo.UpdateSQ(ctx, sq)
+	return line, nil
+}
+
+func (s *Service) UpdateSQLine(ctx context.Context, tenantID, sqID, lineID uint, req UpdateSQLineRequest) (*SQLine, error) {
+	sq, err := s.repo.GetSQ(ctx, tenantID, sqID)
+	if err != nil {
+		return nil, fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusDraft {
+		return nil, fmt.Errorf("cannot edit items on a %s quotation", sq.Status)
+	}
+	line, err := s.repo.GetSQLine(ctx, tenantID, sqID, lineID)
+	if err != nil {
+		return nil, fmt.Errorf("item not found")
+	}
+	line.ProductID = req.ProductID
+	line.VariantID = req.VariantID
+	line.Description = req.Description
+	line.Quantity = req.Quantity
+	line.UOMID = req.UOMID
+	line.UnitPrice = req.UnitPrice
+	line.DiscountPct = req.DiscountPct
+	line.TaxCodeID = req.TaxCodeID
+	line.Notes = req.Notes
+	line.LineTotal = sqLineTotal(line)
+	if err := s.repo.UpdateSQLine(ctx, line); err != nil {
+		return nil, err
+	}
+	sq, _ = s.repo.GetSQ(ctx, tenantID, sqID)
+	calcSQTotals(sq)
+	_ = s.repo.UpdateSQ(ctx, sq)
+	return line, nil
+}
+
+func (s *Service) DeleteSQLine(ctx context.Context, tenantID, sqID, lineID uint) error {
+	sq, err := s.repo.GetSQ(ctx, tenantID, sqID)
+	if err != nil {
+		return fmt.Errorf("quotation not found")
+	}
+	if sq.Status != SQStatusDraft {
+		return fmt.Errorf("cannot delete items from a %s quotation", sq.Status)
+	}
+	if err := s.repo.DeleteSQLine(ctx, tenantID, sqID, lineID); err != nil {
+		return err
+	}
+	sq, _ = s.repo.GetSQ(ctx, tenantID, sqID)
+	calcSQTotals(sq)
+	return s.repo.UpdateSQ(ctx, sq)
+}
+
 // ── Sales Orders ──────────────────────────────────────────────────────────────
 
 func (s *Service) ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesOrder, error) {
@@ -396,17 +726,34 @@ func (s *Service) appendDOLinesToDraftInvoice(ctx context.Context, tenantID uint
 	if err != nil {
 		return // no draft invoice — nothing to append to
 	}
+	// Pre-load all SO lines once so we can resolve prices for DO lines that
+	// didn't explicitly set so_line_id (the FE doesn't expose that field).
+	soLines, _ := s.repo.ListSOLines(ctx, tenantID, *do.SOID)
+	soLineByProduct := make(map[uint]*SOLine, len(soLines))
+	for i := range soLines {
+		l := soLines[i]
+		soLineByProduct[l.ProductID] = &l
+	}
+
 	nextLine := len(si.Lines) + 1
 	for _, doLine := range do.Lines {
 		var unitPrice float64
 		var taxCodeID *uint
 		var discountPct float64
+		var resolvedSOLine *SOLine
 		if doLine.SOLineID != nil {
 			if soLine, err := s.repo.GetSOLine(ctx, tenantID, *do.SOID, *doLine.SOLineID); err == nil {
-				unitPrice = soLine.UnitPrice
-				taxCodeID = soLine.TaxCodeID
-				discountPct = soLine.DiscountPct
+				resolvedSOLine = soLine
 			}
+		}
+		if resolvedSOLine == nil {
+			// Fallback: match SO line by product_id within the same SO.
+			resolvedSOLine = soLineByProduct[doLine.ProductID]
+		}
+		if resolvedSOLine != nil {
+			unitPrice = resolvedSOLine.UnitPrice
+			taxCodeID = resolvedSOLine.TaxCodeID
+			discountPct = resolvedSOLine.DiscountPct
 		}
 		doLineID := doLine.ID
 		line := &SILine{
