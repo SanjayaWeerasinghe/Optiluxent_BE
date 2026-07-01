@@ -163,7 +163,7 @@ func main() {
 	ffStore := featureflags.NewDBStore(db, redisClient)
 
 	// ── HTTP handlers ────────────────────────────────────────────────────────────
-	uHandler := userhandler.NewHandler(userRepository)
+	uHandler := userhandler.NewHandler(userRepository, roleRepository, enforcer)
 	rHandler := rolehandler.NewHandler(roleRepository, permRepository)
 	tHandler := tenanthandler.NewHandler(tenantRepository)
 	aHandler := audithandler.NewHandler(auditRepository)

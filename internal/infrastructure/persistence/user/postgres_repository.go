@@ -95,3 +95,23 @@ func (r *PostgresRepository) ChangePassword(ctx context.Context, id uint, newPas
 		Where("id = ?", id).
 		Update("password_hash", newPasswordHash).Error
 }
+
+// SetRole replaces all role assignments for a user with a single role inside a
+// transaction. Both the user_roles join (used by Casbin's DB adapter) and the
+// denormalised users.role string are updated together — they must agree.
+func (r *PostgresRepository) SetRole(ctx context.Context, userID, roleID uint, roleName string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`DELETE FROM user_roles WHERE user_id = ?`, userID).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(
+			`INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)`,
+			userID, roleID,
+		).Error; err != nil {
+			return err
+		}
+		return tx.Model(&domain.User{}).
+			Where("id = ?", userID).
+			Update("role", roleName).Error
+	})
+}

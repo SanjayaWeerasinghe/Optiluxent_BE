@@ -29,4 +29,9 @@ type Repository interface {
 
 	// ChangePassword updates the user's password
 	ChangePassword(ctx context.Context, id uint, newPasswordHash string) error
+
+	// SetRole replaces all role assignments for the user with this single role,
+	// atomically updating the user_roles join table and the denormalised
+	// users.role string. Caller is responsible for syncing Casbin groupings.
+	SetRole(ctx context.Context, userID, roleID uint, roleName string) error
 }
