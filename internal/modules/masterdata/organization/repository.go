@@ -11,13 +11,15 @@ type Repository interface {
 	GetCompany(ctx context.Context) (*Company, error)
 	SaveCompany(ctx context.Context, c *Company) error
 
-	ListDepartments(ctx context.Context, tenantID uint) ([]*Department, error)
+	CountDepartments(ctx context.Context, tenantID uint) (int64, error)
+	ListDepartments(ctx context.Context, tenantID uint, limit, offset int) ([]*Department, error)
 	GetDepartment(ctx context.Context, id, tenantID uint) (*Department, error)
 	CreateDepartment(ctx context.Context, d *Department) error
 	UpdateDepartment(ctx context.Context, d *Department) error
 	DeleteDepartment(ctx context.Context, id, tenantID uint) error
 
-	ListFiscalYears(ctx context.Context, tenantID uint) ([]*FiscalYear, error)
+	CountFiscalYears(ctx context.Context, tenantID uint) (int64, error)
+	ListFiscalYears(ctx context.Context, tenantID uint, limit, offset int) ([]*FiscalYear, error)
 	GetFiscalYear(ctx context.Context, id, tenantID uint) (*FiscalYear, error)
 	CreateFiscalYear(ctx context.Context, fy *FiscalYear) error
 	CloseFiscalYear(ctx context.Context, id, tenantID uint) error
@@ -26,7 +28,8 @@ type Repository interface {
 	GetAccountingPeriod(ctx context.Context, id, tenantID uint) (*AccountingPeriod, error)
 	CloseAccountingPeriod(ctx context.Context, id, tenantID uint) error
 
-	ListDocumentSequences(ctx context.Context, tenantID uint) ([]*DocumentSequence, error)
+	CountDocumentSequences(ctx context.Context, tenantID uint) (int64, error)
+	ListDocumentSequences(ctx context.Context, tenantID uint, limit, offset int) ([]*DocumentSequence, error)
 	GetDocumentSequence(ctx context.Context, id, tenantID uint) (*DocumentSequence, error)
 	CreateDocumentSequence(ctx context.Context, ds *DocumentSequence) error
 	UpdateDocumentSequence(ctx context.Context, ds *DocumentSequence) error
@@ -59,12 +62,20 @@ func (r *dbRepository) SaveCompany(ctx context.Context, c *Company) error {
 	return r.db.WithContext(ctx).Save(c).Error
 }
 
-func (r *dbRepository) ListDepartments(ctx context.Context, tenantID uint) ([]*Department, error) {
-	var depts []*Department
-	err := r.db.WithContext(ctx).
+func (r *dbRepository) CountDepartments(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&Department{}).
 		Where("tenant_id = ? AND deleted_at IS NULL", tenantID).
-		Order("name").
-		Find(&depts).Error
+		Count(&count).Error
+}
+
+func (r *dbRepository) ListDepartments(ctx context.Context, tenantID uint, limit, offset int) ([]*Department, error) {
+	var depts []*Department
+	q := r.db.WithContext(ctx).Where("tenant_id = ? AND deleted_at IS NULL", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("name").Find(&depts).Error
 	return depts, err
 }
 
@@ -93,12 +104,18 @@ func (r *dbRepository) DeleteDepartment(ctx context.Context, id, tenantID uint) 
 		Delete(&Department{}).Error
 }
 
-func (r *dbRepository) ListFiscalYears(ctx context.Context, tenantID uint) ([]*FiscalYear, error) {
+func (r *dbRepository) CountFiscalYears(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&FiscalYear{}).Where("tenant_id = ?", tenantID).Count(&count).Error
+}
+
+func (r *dbRepository) ListFiscalYears(ctx context.Context, tenantID uint, limit, offset int) ([]*FiscalYear, error) {
 	var fys []*FiscalYear
-	err := r.db.WithContext(ctx).
-		Where("tenant_id = ?", tenantID).
-		Order("start_date DESC").
-		Find(&fys).Error
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("start_date DESC").Find(&fys).Error
 	return fys, err
 }
 
@@ -154,12 +171,18 @@ func (r *dbRepository) CloseAccountingPeriod(ctx context.Context, id, tenantID u
 	return result.Error
 }
 
-func (r *dbRepository) ListDocumentSequences(ctx context.Context, tenantID uint) ([]*DocumentSequence, error) {
+func (r *dbRepository) CountDocumentSequences(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&DocumentSequence{}).Where("tenant_id = ?", tenantID).Count(&count).Error
+}
+
+func (r *dbRepository) ListDocumentSequences(ctx context.Context, tenantID uint, limit, offset int) ([]*DocumentSequence, error) {
 	var seqs []*DocumentSequence
-	err := r.db.WithContext(ctx).
-		Where("tenant_id = ?", tenantID).
-		Order("document_type").
-		Find(&seqs).Error
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Order("document_type").Find(&seqs).Error
 	return seqs, err
 }
 

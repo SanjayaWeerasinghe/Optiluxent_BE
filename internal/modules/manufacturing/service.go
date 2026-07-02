@@ -11,14 +11,36 @@ import (
 	"github.com/google/uuid"
 )
 
+// QCAutoCreator is the minimal interface manufacturing needs from the inventory
+// module to spin up a Product QC whenever a production output is recorded.
+// inventory.Service satisfies this via its CreateAutoQC method (wrapped at injection).
+type QCAutoLine struct {
+	ProductID uint
+	VariantID *uint
+	Quantity  float64
+}
+
+type QCAutoCreator interface {
+	CreateAutoQC(
+		ctx context.Context,
+		tenantID, userID uint,
+		qcType, refType string,
+		refID, warehouseID uint,
+		notes string,
+		lines []QCAutoLine,
+	) error
+}
+
 // Service contains all manufacturing business logic.
 type Service struct {
 	repo Repository
 	bus  events.EventBus
+	qc   QCAutoCreator
 }
 
 func NewService(repo Repository) *Service             { return &Service{repo: repo} }
 func (s *Service) SetEventBus(bus events.EventBus)    { s.bus = bus }
+func (s *Service) SetQCAutoCreator(qc QCAutoCreator)  { s.qc = qc }
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {
@@ -508,6 +530,17 @@ func (s *Service) AddOutput(ctx context.Context, tenantID, orderID uint, req *Ad
 	}
 	if err := s.repo.AddOutput(ctx, output); err != nil {
 		return nil, err
+	}
+	// Auto-create a Product QC for the newly recorded output.
+	if s.qc != nil {
+		whID := order.WarehouseID
+		if output.WarehouseID != nil {
+			whID = *output.WarehouseID
+		}
+		_ = s.qc.CreateAutoQC(ctx, tenantID, 0,
+			"PRODUCT_QC", "PRODUCTION_OUTPUT", output.ID, whID,
+			"Auto-created from production order "+order.Code+" output line "+fmt.Sprintf("%d", output.LineNumber),
+			[]QCAutoLine{{ProductID: output.ProductID, Quantity: output.Quantity}})
 	}
 	return output, nil
 }

@@ -7,7 +7,8 @@ import (
 )
 
 type Repository interface {
-	ListWarehouses(ctx context.Context, tenantID uint) ([]Warehouse, error)
+	CountWarehouses(ctx context.Context, tenantID uint) (int64, error)
+	ListWarehouses(ctx context.Context, tenantID uint, limit, offset int) ([]Warehouse, error)
 	GetWarehouse(ctx context.Context, tenantID, id uint) (*Warehouse, error)
 	CreateWarehouse(ctx context.Context, w *Warehouse) error
 	UpdateWarehouse(ctx context.Context, w *Warehouse) error
@@ -26,9 +27,18 @@ type dbRepository struct{ db *gorm.DB }
 
 func NewRepository(db *gorm.DB) Repository { return &dbRepository{db: db} }
 
-func (r *dbRepository) ListWarehouses(ctx context.Context, tenantID uint) ([]Warehouse, error) {
+func (r *dbRepository) CountWarehouses(ctx context.Context, tenantID uint) (int64, error) {
+	var count int64
+	return count, r.db.WithContext(ctx).Model(&Warehouse{}).Where("tenant_id = ?", tenantID).Count(&count).Error
+}
+
+func (r *dbRepository) ListWarehouses(ctx context.Context, tenantID uint, limit, offset int) ([]Warehouse, error) {
 	var rows []Warehouse
-	return rows, r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("name").Find(&rows).Error
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	return rows, q.Order("name").Find(&rows).Error
 }
 
 func (r *dbRepository) GetWarehouse(ctx context.Context, tenantID, id uint) (*Warehouse, error) {

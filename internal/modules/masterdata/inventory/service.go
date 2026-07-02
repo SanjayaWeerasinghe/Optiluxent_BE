@@ -19,8 +19,12 @@ type Service struct{ repo Repository }
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
-func (s *Service) ListWarehouses(ctx context.Context, tenantID uint) ([]Warehouse, error) {
-	return s.repo.ListWarehouses(ctx, tenantID)
+func (s *Service) CountWarehouses(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountWarehouses(ctx, tenantID)
+}
+
+func (s *Service) ListWarehouses(ctx context.Context, tenantID uint, limit, offset int) ([]Warehouse, error) {
+	return s.repo.ListWarehouses(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetWarehouse(ctx context.Context, tenantID, id uint) (*Warehouse, error) {

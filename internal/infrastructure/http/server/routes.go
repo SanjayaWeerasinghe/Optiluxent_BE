@@ -109,6 +109,7 @@ func (s *Server) setupV1Routes(
 	users.Get("", middleware.RequirePermission(enforcer, "users", "read"), userHandler.List)
 	users.Get("/:id", middleware.RequirePermission(enforcer, "users", "read"), userHandler.Get)
 	users.Put("/:id", middleware.RequirePermission(enforcer, "users", "update"), auditMW, userHandler.Update)
+	users.Put("/:id/role", middleware.RequirePermission(enforcer, "users", "update"), auditMW, userHandler.AssignRole)
 	users.Delete("/:id", middleware.RequirePermission(enforcer, "users", "delete"), auditMW, userHandler.Delete)
 
 	// Own profile / password (any authenticated user)

@@ -1,5 +1,55 @@
 package sales
 
+// ── Sales Quotation DTOs ──────────────────────────────────────────────────────
+
+type CreateSQRequest struct {
+	Code               string  `json:"code"`
+	CustomerID         uint    `json:"customer_id"           validate:"required"`
+	QuotationDate      string  `json:"quotation_date"        validate:"omitempty"`
+	ValidUntil         *string `json:"valid_until"`
+	CurrencyID         uint    `json:"currency_id"           validate:"required"`
+	ExchangeRate       float64 `json:"exchange_rate"         validate:"omitempty,min=0"`
+	PaymentTermID      *uint   `json:"payment_term_id"`
+	WarehouseID        uint    `json:"warehouse_id"          validate:"required"`
+	CustomerReference  string  `json:"customer_reference"`
+	TermsAndConditions string  `json:"terms_and_conditions"`
+	Notes              string  `json:"notes"`
+}
+
+type UpdateSQRequest struct {
+	ValidUntil         *string  `json:"valid_until"`
+	ExchangeRate       *float64 `json:"exchange_rate"`
+	PaymentTermID      *uint    `json:"payment_term_id"`
+	DiscountAmount     *float64 `json:"discount_amount"`
+	CustomerReference  string   `json:"customer_reference"`
+	TermsAndConditions string   `json:"terms_and_conditions"`
+	Notes              string   `json:"notes"`
+}
+
+type AddSQLineRequest struct {
+	ProductID   uint    `json:"product_id"  validate:"required"`
+	VariantID   *uint   `json:"variant_id"`
+	Description string  `json:"description" validate:"max=500"`
+	Quantity    float64 `json:"quantity"    validate:"required,min=0"`
+	UOMID       uint    `json:"uom_id"      validate:"required"`
+	UnitPrice   float64 `json:"unit_price"  validate:"required,min=0"`
+	DiscountPct float64 `json:"discount_pct" validate:"omitempty,min=0,max=100"`
+	TaxCodeID   *uint   `json:"tax_code_id"`
+	Notes       string  `json:"notes"`
+}
+
+type UpdateSQLineRequest struct {
+	ProductID   uint    `json:"product_id"  validate:"required"`
+	VariantID   *uint   `json:"variant_id"`
+	Description string  `json:"description" validate:"max=500"`
+	Quantity    float64 `json:"quantity"    validate:"required,min=0"`
+	UOMID       uint    `json:"uom_id"      validate:"required"`
+	UnitPrice   float64 `json:"unit_price"  validate:"required,min=0"`
+	DiscountPct float64 `json:"discount_pct" validate:"omitempty,min=0,max=100"`
+	TaxCodeID   *uint   `json:"tax_code_id"`
+	Notes       string  `json:"notes"`
+}
+
 // ── Sales Order DTOs ──────────────────────────────────────────────────────────
 
 type CreateSORequest struct {

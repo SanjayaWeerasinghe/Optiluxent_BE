@@ -26,8 +26,12 @@ func (s *Service) SaveCompany(ctx context.Context, c *Company) error {
 	return s.repo.SaveCompany(ctx, c)
 }
 
-func (s *Service) ListDepartments(ctx context.Context, tenantID uint) ([]*Department, error) {
-	return s.repo.ListDepartments(ctx, tenantID)
+func (s *Service) CountDepartments(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountDepartments(ctx, tenantID)
+}
+
+func (s *Service) ListDepartments(ctx context.Context, tenantID uint, limit, offset int) ([]*Department, error) {
+	return s.repo.ListDepartments(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetDepartment(ctx context.Context, id, tenantID uint) (*Department, error) {
@@ -60,8 +64,12 @@ func (s *Service) DeleteDepartment(ctx context.Context, id, tenantID uint) error
 	return s.repo.DeleteDepartment(ctx, id, tenantID)
 }
 
-func (s *Service) ListFiscalYears(ctx context.Context, tenantID uint) ([]*FiscalYear, error) {
-	return s.repo.ListFiscalYears(ctx, tenantID)
+func (s *Service) CountFiscalYears(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountFiscalYears(ctx, tenantID)
+}
+
+func (s *Service) ListFiscalYears(ctx context.Context, tenantID uint, limit, offset int) ([]*FiscalYear, error) {
+	return s.repo.ListFiscalYears(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetFiscalYear(ctx context.Context, id, tenantID uint) (*FiscalYear, error) {
@@ -111,8 +119,12 @@ func (s *Service) CloseAccountingPeriod(ctx context.Context, id, tenantID uint) 
 	return s.repo.CloseAccountingPeriod(ctx, id, tenantID)
 }
 
-func (s *Service) ListDocumentSequences(ctx context.Context, tenantID uint) ([]*DocumentSequence, error) {
-	return s.repo.ListDocumentSequences(ctx, tenantID)
+func (s *Service) CountDocumentSequences(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountDocumentSequences(ctx, tenantID)
+}
+
+func (s *Service) ListDocumentSequences(ctx context.Context, tenantID uint, limit, offset int) ([]*DocumentSequence, error) {
+	return s.repo.ListDocumentSequences(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetDocumentSequence(ctx context.Context, id, tenantID uint) (*DocumentSequence, error) {

@@ -12,13 +12,35 @@ import (
 	"github.com/google/uuid"
 )
 
+// QCAutoCreator is the minimal interface procurement needs from the inventory module
+// to spin up a Material QC when a WITH_PO / WITHOUT_PO GRN is confirmed.
+// inventory.Service satisfies this via its CreateAutoQC method.
+type QCAutoLine struct {
+	ProductID uint
+	VariantID *uint
+	Quantity  float64
+}
+
+type QCAutoCreator interface {
+	CreateAutoQC(
+		ctx context.Context,
+		tenantID, userID uint,
+		qcType, refType string,
+		refID, warehouseID uint,
+		notes string,
+		lines []QCAutoLine,
+	) error
+}
+
 type Service struct {
 	repo Repository
 	bus  events.EventBus
+	qc   QCAutoCreator
 }
 
 func NewService(repo Repository) *Service                      { return &Service{repo: repo} }
 func (s *Service) SetEventBus(bus events.EventBus)             { s.bus = bus }
+func (s *Service) SetQCAutoCreator(qc QCAutoCreator)           { s.qc = qc }
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {
@@ -311,6 +333,23 @@ func (s *Service) CreatePO(ctx context.Context, tenantID, userID uint, req *Crea
 		}
 		return nil, err
 	}
+	// Auto-create a draft Purchase Invoice so the expected bill exists from day one.
+	// Lines are populated later as GRNs are confirmed (actual received quantities).
+	if invCode, err := s.repo.NextCode(ctx, tenantID, "PURCHASE_INVOICE"); err == nil {
+		inv := &PurchaseInvoice{
+			TenantID:      tenantID,
+			Code:          invCode,
+			SupplierID:    po.SupplierID,
+			POID:          po.ID,
+			InvoiceDate:   d,
+			CurrencyID:    po.CurrencyID,
+			ExchangeRate:  er,
+			PaymentTermID: po.PaymentTermID,
+			Status:        InvStatusDraft,
+			CreatedBy:     &userID,
+		}
+		_ = s.repo.CreateInvoice(ctx, inv)
+	}
 	return po, nil
 }
 
@@ -365,22 +404,6 @@ func (s *Service) ConfirmPO(ctx context.Context, tenantID, id, userID uint) (*Pu
 	po.ConfirmedAt = &now
 	if err := s.repo.UpdatePO(ctx, po); err != nil {
 		return nil, err
-	}
-	// Auto-create a draft Purchase Invoice for this PO
-	if code, err := s.repo.NextCode(ctx, tenantID, "PURCHASE_INVOICE"); err == nil {
-		inv := &PurchaseInvoice{
-			TenantID:      tenantID,
-			Code:          code,
-			SupplierID:    po.SupplierID,
-			POID:          po.ID,
-			InvoiceDate:   today(),
-			CurrencyID:    po.CurrencyID,
-			ExchangeRate:  po.ExchangeRate,
-			PaymentTermID: po.PaymentTermID,
-			Status:        InvStatusDraft,
-			CreatedBy:     &userID,
-		}
-		_ = s.repo.CreateInvoice(ctx, inv)
 	}
 	return po, nil
 }
@@ -517,9 +540,18 @@ func (s *Service) CreateGRN(ctx context.Context, tenantID, userID uint, req *Cre
 	if d == "" {
 		d = today()
 	}
+	grnType := req.GRNType
+	if grnType == "" {
+		if req.POID != nil {
+			grnType = GRNTypeWithPO
+		} else {
+			grnType = GRNTypeWithoutPO
+		}
+	}
 	grn := &GoodsReceipt{
 		TenantID:    tenantID,
 		Code:        code,
+		GRNType:     grnType,
 		POID:        req.POID,
 		SupplierID:  req.SupplierID,
 		ReceiptDate: d,
@@ -548,6 +580,22 @@ func (s *Service) ConfirmGRN(ctx context.Context, tenantID, id, userID uint) err
 	// Auto-append GRN lines to the PO's draft invoice
 	if grn.POID != nil {
 		s.appendGRNLinesToDraftInvoice(ctx, tenantID, grn)
+	}
+	// Auto-create a Material QC for WITH_PO / WITHOUT_PO GRNs.
+	// Customer/Production returns don't go through QC.
+	if s.qc != nil && (grn.GRNType == GRNTypeWithPO || grn.GRNType == GRNTypeWithoutPO) {
+		lines := make([]QCAutoLine, 0, len(grn.Lines))
+		for _, gl := range grn.Lines {
+			lines = append(lines, QCAutoLine{
+				ProductID: gl.ProductID,
+				VariantID: gl.VariantID,
+				Quantity:  gl.Quantity,
+			})
+		}
+		_ = s.qc.CreateAutoQC(ctx, tenantID, userID,
+			"MATERIAL_QC", "GRN", grn.ID, grn.WarehouseID,
+			"Auto-created from "+grn.Code+" ("+grn.GRNType+")",
+			lines)
 	}
 	return nil
 }

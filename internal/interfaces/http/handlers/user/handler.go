@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 
+	"erp-system/internal/domain/rbac"
+	domainrole "erp-system/internal/domain/role"
 	domainuser "erp-system/internal/domain/user"
 	httputil "erp-system/pkg/http"
 
@@ -14,12 +16,16 @@ import (
 
 type Handler struct {
 	userRepo domainuser.Repository
+	roleRepo domainrole.Repository
+	enforcer rbac.Enforcer
 	validate *validator.Validate
 }
 
-func NewHandler(userRepo domainuser.Repository) *Handler {
+func NewHandler(userRepo domainuser.Repository, roleRepo domainrole.Repository, enforcer rbac.Enforcer) *Handler {
 	return &Handler{
 		userRepo: userRepo,
+		roleRepo: roleRepo,
+		enforcer: enforcer,
 		validate: validator.New(),
 	}
 }
@@ -191,6 +197,61 @@ func (h *Handler) ChangePassword(c *fiber.Ctx) error {
 	}
 
 	return httputil.Success(c, "Password changed successfully", nil)
+}
+
+// PUT /api/v1/users/:id/role
+// Replaces the target user's role assignment. Updates both the persisted
+// user_roles join (read by Casbin's DB adapter on next LoadPolicy) and the
+// live in-memory Casbin groupings, so the new permissions take effect for any
+// active token without a restart.
+func (h *Handler) AssignRole(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+
+	var req AssignRoleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	if fields := validateStruct(h.validate, req); fields != nil {
+		return httputil.ValidationError(c, "validation failed", fields)
+	}
+
+	user, err := h.userRepo.GetByID(c.UserContext(), uint(id))
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to fetch user")
+	}
+	if user == nil {
+		return httputil.NotFound(c, "user not found")
+	}
+
+	role, err := h.roleRepo.GetByID(c.UserContext(), req.RoleID)
+	if err != nil || role == nil {
+		return httputil.BadRequest(c, "role not found")
+	}
+
+	// Persist DB first — failure here aborts before we touch Casbin's in-memory
+	// state.
+	if err := h.userRepo.SetRole(c.UserContext(), user.ID, role.ID, role.Name); err != nil {
+		return httputil.InternalServerError(c, "failed to assign role")
+	}
+
+	// Sync Casbin groupings so the new role's permissions are honoured
+	// immediately. Best-effort — the DB is authoritative and LoadPolicy on the
+	// next restart would reconcile anyway.
+	userKey := strconv.FormatUint(uint64(user.ID), 10)
+	if h.enforcer != nil {
+		if existing, _ := h.enforcer.GetRolesForUser(userKey); existing != nil {
+			for _, r := range existing {
+				_ = h.enforcer.RemoveRoleForUser(userKey, r)
+			}
+		}
+		_ = h.enforcer.AddRoleForUser(userKey, role.Name)
+	}
+
+	user.Role = role.Name
+	return httputil.Success(c, "role assigned", toUserResponse(user))
 }
 
 func toUserResponse(u *domainuser.User) UserResponse {

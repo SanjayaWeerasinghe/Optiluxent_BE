@@ -48,6 +48,216 @@ func parseID(c *fiber.Ctx, param string) (uint, error) {
 	return uint(id), nil
 }
 
+// ── Sales Quotations ──────────────────────────────────────────────────────────
+
+func (h *Handler) ListSQs(c *fiber.Ctx) error {
+	tenantID := tenantFromCtx(c)
+	var customerID *uint
+	if s := c.Query("customer_id"); s != "" {
+		if cid, err := strconv.ParseUint(s, 10, 64); err == nil {
+			v := uint(cid)
+			customerID = &v
+		}
+	}
+	rows, err := h.svc.ListSQs(c.Context(), tenantID, customerID, c.Query("status"))
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to list quotations")
+	}
+	return httputil.Success(c, "quotations retrieved", rows)
+}
+
+func (h *Handler) GetSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	sq, err := h.svc.GetSQ(c.Context(), tenantFromCtx(c), id)
+	if err != nil {
+		return httputil.NotFound(c, "quotation not found")
+	}
+	return httputil.Success(c, "quotation retrieved", sq)
+}
+
+func (h *Handler) CreateSQ(c *fiber.Ctx) error {
+	var req CreateSQRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	if errs := validateStruct(h.validate, req); errs != nil {
+		return httputil.ValidationError(c, "validation failed", errs)
+	}
+	sq, err := h.svc.CreateSQ(c.Context(), tenantFromCtx(c), userFromCtx(c), req)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Created(c, "quotation created", sq)
+}
+
+func (h *Handler) UpdateSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	var req UpdateSQRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	sq, err := h.svc.UpdateSQ(c.Context(), tenantFromCtx(c), id, req)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation updated", sq)
+}
+
+func (h *Handler) DeleteSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.DeleteSQ(c.Context(), tenantFromCtx(c), id); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.NoContent(c)
+}
+
+func (h *Handler) SubmitSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	sq, err := h.svc.SubmitSQ(c.Context(), tenantFromCtx(c), id)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation sent", sq)
+}
+
+func (h *Handler) AcceptSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	sq, so, err := h.svc.AcceptSQ(c.Context(), tenantFromCtx(c), userFromCtx(c), id)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation accepted", fiber.Map{
+		"quotation": sq,
+		"sales_order": fiber.Map{
+			"id":   so.ID,
+			"code": so.Code,
+		},
+	})
+}
+
+func (h *Handler) RejectSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	sq, err := h.svc.RejectSQ(c.Context(), tenantFromCtx(c), userFromCtx(c), id)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation rejected", sq)
+}
+
+func (h *Handler) CancelSQ(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	sq, err := h.svc.CancelSQ(c.Context(), tenantFromCtx(c), id)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation cancelled", sq)
+}
+
+// ── SQ Lines ──────────────────────────────────────────────────────────────────
+
+func (h *Handler) ListSQLines(c *fiber.Ctx) error {
+	sqID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	rows, err := h.svc.ListSQLines(c.Context(), tenantFromCtx(c), sqID)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation lines retrieved", rows)
+}
+
+func (h *Handler) GetSQLine(c *fiber.Ctx) error {
+	sqID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	lineID, err := parseID(c, "itemId")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid item id")
+	}
+	line, err := h.svc.GetSQLine(c.Context(), tenantFromCtx(c), sqID, lineID)
+	if err != nil {
+		return httputil.NotFound(c, "line not found")
+	}
+	return httputil.Success(c, "quotation line retrieved", line)
+}
+
+func (h *Handler) AddSQLine(c *fiber.Ctx) error {
+	sqID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	var req AddSQLineRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	if errs := validateStruct(h.validate, req); errs != nil {
+		return httputil.ValidationError(c, "validation failed", errs)
+	}
+	line, err := h.svc.AddSQLine(c.Context(), tenantFromCtx(c), sqID, req)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Created(c, "quotation line added", line)
+}
+
+func (h *Handler) UpdateSQLine(c *fiber.Ctx) error {
+	sqID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	lineID, err := parseID(c, "itemId")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid item id")
+	}
+	var req UpdateSQLineRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	line, err := h.svc.UpdateSQLine(c.Context(), tenantFromCtx(c), sqID, lineID, req)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "quotation line updated", line)
+}
+
+func (h *Handler) DeleteSQLine(c *fiber.Ctx) error {
+	sqID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	lineID, err := parseID(c, "itemId")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid item id")
+	}
+	if err := h.svc.DeleteSQLine(c.Context(), tenantFromCtx(c), sqID, lineID); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.NoContent(c)
+}
+
 // ── Sales Orders ──────────────────────────────────────────────────────────────
 
 func (h *Handler) ListSOs(c *fiber.Ctx) error {

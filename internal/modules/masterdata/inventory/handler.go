@@ -38,11 +38,17 @@ func validateStruct(v *validator.Validate, s interface{}) map[string]interface{}
 // ── Warehouses ────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListWarehouses(c *fiber.Ctx) error {
-	rows, err := h.svc.ListWarehouses(c.Context(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountWarehouses(c.Context(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count warehouses")
+	}
+	rows, err := h.svc.ListWarehouses(c.Context(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list warehouses")
 	}
-	return httputil.Success(c, "warehouses retrieved", rows)
+	return httputil.SuccessWithMeta(c, "warehouses retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetWarehouse(c *fiber.Ctx) error {

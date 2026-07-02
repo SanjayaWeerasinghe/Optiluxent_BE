@@ -78,8 +78,8 @@ func New(cfg *config.Config, log logger.Logger) *Server {
 		// Case sensitive routing
 		CaseSensitive: true,
 
-		// Strict routing (trailing slash matters)
-		StrictRouting: true,
+		// Strict routing disabled — /path and /path/ both match
+		StrictRouting: false,
 
 		// Enable printing routes on startup
 		EnablePrintRoutes: cfg.App.Debug,

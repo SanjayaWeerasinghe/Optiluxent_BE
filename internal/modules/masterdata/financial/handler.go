@@ -42,11 +42,16 @@ func validateStruct(v *validator.Validate, s interface{}) map[string]interface{}
 
 // GET /financial/currencies
 func (h *Handler) ListCurrencies(c *fiber.Ctx) error {
-	list, err := h.svc.ListCurrencies(c.UserContext())
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountCurrencies(c.UserContext())
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count currencies")
+	}
+	list, err := h.svc.ListCurrencies(c.UserContext(), limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list currencies")
 	}
-	return httputil.Success(c, "Currencies retrieved", list)
+	return httputil.SuccessWithMeta(c, "Currencies retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/currencies
@@ -132,12 +137,16 @@ func (h *Handler) ListExchangeRates(c *fiber.Ctx) error {
 			to = &t
 		}
 	}
-
-	list, err := h.svc.ListExchangeRates(c.UserContext(), tenantFromCtx(c), fromCurrID, from, to)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountExchangeRates(c.UserContext(), tenantFromCtx(c), fromCurrID, from, to)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count exchange rates")
+	}
+	list, err := h.svc.ListExchangeRates(c.UserContext(), tenantFromCtx(c), fromCurrID, from, to, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list exchange rates")
 	}
-	return httputil.Success(c, "Exchange rates retrieved", list)
+	return httputil.SuccessWithMeta(c, "Exchange rates retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // GET /financial/exchange-rates/latest
@@ -182,11 +191,17 @@ func (h *Handler) CreateExchangeRate(c *fiber.Ctx) error {
 
 // GET /financial/chart-of-accounts
 func (h *Handler) ListCoA(c *fiber.Ctx) error {
-	list, err := h.svc.ListCoA(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountCoA(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count chart of accounts")
+	}
+	list, err := h.svc.ListCoA(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list chart of accounts")
 	}
-	return httputil.Success(c, "Chart of accounts retrieved", list)
+	return httputil.SuccessWithMeta(c, "Chart of accounts retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/chart-of-accounts
@@ -283,11 +298,17 @@ func (h *Handler) DeleteCoA(c *fiber.Ctx) error {
 
 // GET /financial/cost-centers
 func (h *Handler) ListCostCenters(c *fiber.Ctx) error {
-	list, err := h.svc.ListCostCenters(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountCostCenters(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count cost centers")
+	}
+	list, err := h.svc.ListCostCenters(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list cost centers")
 	}
-	return httputil.Success(c, "Cost centers retrieved", list)
+	return httputil.SuccessWithMeta(c, "Cost centers retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/cost-centers
@@ -348,11 +369,17 @@ func (h *Handler) UpdateCostCenter(c *fiber.Ctx) error {
 
 // GET /financial/payment-terms
 func (h *Handler) ListPaymentTerms(c *fiber.Ctx) error {
-	list, err := h.svc.ListPaymentTerms(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountPaymentTerms(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count payment terms")
+	}
+	list, err := h.svc.ListPaymentTerms(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list payment terms")
 	}
-	return httputil.Success(c, "Payment terms retrieved", list)
+	return httputil.SuccessWithMeta(c, "Payment terms retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/payment-terms
@@ -421,11 +448,16 @@ func (h *Handler) UpdatePaymentTerm(c *fiber.Ctx) error {
 
 // GET /financial/banks
 func (h *Handler) ListBanks(c *fiber.Ctx) error {
-	list, err := h.svc.ListBanks(c.UserContext())
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountBanks(c.UserContext())
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count banks")
+	}
+	list, err := h.svc.ListBanks(c.UserContext(), limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list banks")
 	}
-	return httputil.Success(c, "Banks retrieved", list)
+	return httputil.SuccessWithMeta(c, "Banks retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/banks
@@ -454,11 +486,17 @@ func (h *Handler) CreateBank(c *fiber.Ctx) error {
 
 // GET /financial/bank-accounts
 func (h *Handler) ListBankAccounts(c *fiber.Ctx) error {
-	list, err := h.svc.ListBankAccounts(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountBankAccounts(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count bank accounts")
+	}
+	list, err := h.svc.ListBankAccounts(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list bank accounts")
 	}
-	return httputil.Success(c, "Bank accounts retrieved", list)
+	return httputil.SuccessWithMeta(c, "Bank accounts retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/bank-accounts
@@ -522,11 +560,17 @@ func (h *Handler) UpdateBankAccount(c *fiber.Ctx) error {
 
 // GET /financial/tax-codes
 func (h *Handler) ListTaxCodes(c *fiber.Ctx) error {
-	list, err := h.svc.ListTaxCodes(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountTaxCodes(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count tax codes")
+	}
+	list, err := h.svc.ListTaxCodes(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list tax codes")
 	}
-	return httputil.Success(c, "Tax codes retrieved", list)
+	return httputil.SuccessWithMeta(c, "Tax codes retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/tax-codes
@@ -589,11 +633,17 @@ func (h *Handler) UpdateTaxCode(c *fiber.Ctx) error {
 
 // GET /financial/tax-groups
 func (h *Handler) ListTaxGroups(c *fiber.Ctx) error {
-	list, err := h.svc.ListTaxGroups(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountTaxGroups(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count tax groups")
+	}
+	list, err := h.svc.ListTaxGroups(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list tax groups")
 	}
-	return httputil.Success(c, "Tax groups retrieved", list)
+	return httputil.SuccessWithMeta(c, "Tax groups retrieved", list, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /financial/tax-groups

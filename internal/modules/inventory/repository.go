@@ -634,9 +634,83 @@ func (r *dbRepository) SubmitQualityCheck(ctx context.Context, tenantID, id, use
 		overallStatus = QCStatusPartial
 	}
 
-	return r.db.WithContext(ctx).Model(&QualityCheck{}).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Update("status", overallStatus).Error
+	// Lookup location_id from upstream reference for accurate stock placement.
+	// MATERIAL_QC → goods_receipt_lines.location_id (matched by product_id within the GRN).
+	// PRODUCT_QC  → production_outputs.location_id (matched by output ID).
+	var ledgerRows []ledgerRow
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Finalize the QC status first
+		if err := tx.Model(&QualityCheck{}).
+			Where("tenant_id = ? AND id = ?", tenantID, id).
+			Update("status", overallStatus).Error; err != nil {
+			return err
+		}
+		// Post qty_passed for each line to stock_balances + collect ledger rows.
+		// Skip lines that didn't pass any qty.
+		txType := "QC_RELEASE"
+		refType := qc.ReferenceType
+		var refID uint
+		if qc.ReferenceID != nil {
+			refID = *qc.ReferenceID
+		}
+		// Build a product_id → location_id map from the upstream reference for placement.
+		locByProduct := r.locationsForQCSource(tx, qc)
+		for _, line := range qc.Lines {
+			if line.QtyPassed <= 0 {
+				continue
+			}
+			var locID *uint
+			if l, ok := locByProduct[line.ProductID]; ok {
+				locID = l
+			}
+			if err := r.upsertStockBalance(tx, tenantID, line.ProductID, line.VariantID, qc.WarehouseID, locID, line.QtyPassed); err != nil {
+				return fmt.Errorf("failed to post stock for QC line %d: %w", line.ID, err)
+			}
+			ledgerRows = append(ledgerRows, ledgerRow{
+				tenantID: tenantID, productID: line.ProductID, variantID: line.VariantID,
+				warehouseID: qc.WarehouseID, locationID: locID,
+				txType: txType, refType: refType, refID: refID,
+				qty: line.QtyPassed, date: qc.CheckDate, createdBy: userID,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	r.writeToLedger(ctx, ledgerRows)
+	return nil
+}
+
+// locationsForQCSource resolves preferred storage location for each product on the
+// upstream document (GRN or Production Output) so QC pass posts stock to the right bin.
+// Returns an empty map if the reference type is unrecognised.
+func (r *dbRepository) locationsForQCSource(tx *gorm.DB, qc *QualityCheck) map[uint]*uint {
+	out := make(map[uint]*uint)
+	if qc.ReferenceID == nil {
+		return out
+	}
+	switch qc.ReferenceType {
+	case "GRN":
+		var rows []struct {
+			ProductID  uint
+			LocationID *uint
+		}
+		tx.Raw(`SELECT product_id, location_id FROM goods_receipt_lines WHERE grn_id = ?`, *qc.ReferenceID).Scan(&rows)
+		for _, r := range rows {
+			out[r.ProductID] = r.LocationID
+		}
+	case "PRODUCTION_OUTPUT":
+		var row struct {
+			ProductID  uint
+			LocationID *uint
+		}
+		tx.Raw(`SELECT product_id, location_id FROM production_outputs WHERE id = ?`, *qc.ReferenceID).Scan(&row)
+		if row.ProductID != 0 {
+			out[row.ProductID] = row.LocationID
+		}
+	}
+	return out
 }
 
 // ── Stock Balances ────────────────────────────────────────────────────────────

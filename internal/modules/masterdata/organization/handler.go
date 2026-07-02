@@ -95,11 +95,16 @@ func (h *Handler) SaveCompany(c *fiber.Ctx) error {
 // GET /organization/departments
 func (h *Handler) ListDepartments(c *fiber.Ctx) error {
 	tenantID := tenantFromCtx(c)
-	depts, err := h.svc.ListDepartments(c.UserContext(), tenantID)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountDepartments(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count departments")
+	}
+	depts, err := h.svc.ListDepartments(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list departments")
 	}
-	return httputil.Success(c, "Departments retrieved", depts)
+	return httputil.SuccessWithMeta(c, "Departments retrieved", depts, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /organization/departments
@@ -190,11 +195,17 @@ func (h *Handler) DeleteDepartment(c *fiber.Ctx) error {
 
 // GET /organization/fiscal-years
 func (h *Handler) ListFiscalYears(c *fiber.Ctx) error {
-	fys, err := h.svc.ListFiscalYears(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountFiscalYears(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count fiscal years")
+	}
+	fys, err := h.svc.ListFiscalYears(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list fiscal years")
 	}
-	return httputil.Success(c, "Fiscal years retrieved", fys)
+	return httputil.SuccessWithMeta(c, "Fiscal years retrieved", fys, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /organization/fiscal-years
@@ -261,11 +272,17 @@ func (h *Handler) CloseAccountingPeriod(c *fiber.Ctx) error {
 
 // GET /organization/document-sequences
 func (h *Handler) ListDocumentSequences(c *fiber.Ctx) error {
-	seqs, err := h.svc.ListDocumentSequences(c.UserContext(), tenantFromCtx(c))
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountDocumentSequences(c.UserContext(), tenantID)
+	if err != nil {
+		return httputil.InternalServerError(c, "Failed to count document sequences")
+	}
+	seqs, err := h.svc.ListDocumentSequences(c.UserContext(), tenantID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "Failed to list document sequences")
 	}
-	return httputil.Success(c, "Document sequences retrieved", seqs)
+	return httputil.SuccessWithMeta(c, "Document sequences retrieved", seqs, httputil.Paginate(page, perPage, int(total)))
 }
 
 // POST /organization/document-sequences

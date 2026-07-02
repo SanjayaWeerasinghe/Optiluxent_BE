@@ -15,6 +15,27 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	canDelete  := middleware.RequirePermission(enforcer, "sales", "delete")
 	canApprove := middleware.RequirePermission(enforcer, "sales", "approve")
 
+	// ── Sales Quotations ────────────────────────────────────────────────────────
+	sqs := router.Group("/quotations")
+	sqs.Get("", canRead, h.ListSQs)
+	sqs.Post("", canWrite, auditMW, h.CreateSQ)
+	sqs.Get("/:id", canRead, h.GetSQ)
+	sqs.Put("/:id", canWrite, auditMW, h.UpdateSQ)
+	sqs.Delete("/:id", canDelete, auditMW, h.DeleteSQ)
+
+	// SQ workflow
+	sqs.Post("/:id/submit", canWrite, auditMW, h.SubmitSQ)
+	sqs.Post("/:id/accept", canApprove, auditMW, h.AcceptSQ)
+	sqs.Post("/:id/reject", canApprove, auditMW, h.RejectSQ)
+	sqs.Post("/:id/cancel", canWrite, auditMW, h.CancelSQ)
+
+	// SQ Lines
+	sqs.Get("/:id/items", canRead, h.ListSQLines)
+	sqs.Post("/:id/items", canWrite, auditMW, h.AddSQLine)
+	sqs.Get("/:id/items/:itemId", canRead, h.GetSQLine)
+	sqs.Put("/:id/items/:itemId", canWrite, auditMW, h.UpdateSQLine)
+	sqs.Delete("/:id/items/:itemId", canDelete, auditMW, h.DeleteSQLine)
+
 	// ── Sales Orders ────────────────────────────────────────────────────────────
 	sos := router.Group("/sales-orders")
 	sos.Get("", canRead, h.ListSOs)

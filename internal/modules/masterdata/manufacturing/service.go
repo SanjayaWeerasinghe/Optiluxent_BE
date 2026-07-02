@@ -14,8 +14,12 @@ func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
 // ── BOMs ──────────────────────────────────────────────────────────────────────
 
-func (s *Service) ListBOMs(ctx context.Context, tenantID uint) ([]BillOfMaterials, error) {
-	return s.repo.ListBOMs(ctx, tenantID)
+func (s *Service) CountBOMs(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountBOMs(ctx, tenantID)
+}
+
+func (s *Service) ListBOMs(ctx context.Context, tenantID uint, limit, offset int) ([]BillOfMaterials, error) {
+	return s.repo.ListBOMs(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetBOM(ctx context.Context, tenantID, id uint) (*BillOfMaterials, error) {
@@ -103,8 +107,12 @@ func (s *Service) DeleteBOMLine(ctx context.Context, tenantID, id uint) error {
 
 // ── Work Centers ──────────────────────────────────────────────────────────────
 
-func (s *Service) ListWorkCenters(ctx context.Context, tenantID uint) ([]WorkCenter, error) {
-	return s.repo.ListWorkCenters(ctx, tenantID)
+func (s *Service) CountWorkCenters(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountWorkCenters(ctx, tenantID)
+}
+
+func (s *Service) ListWorkCenters(ctx context.Context, tenantID uint, limit, offset int) ([]WorkCenter, error) {
+	return s.repo.ListWorkCenters(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) CreateWorkCenter(ctx context.Context, tenantID uint, req *CreateWorkCenterRequest) (*WorkCenter, error) {
@@ -163,8 +171,12 @@ func (s *Service) DeleteWorkCenter(ctx context.Context, tenantID, id uint) error
 
 // ── Routings ──────────────────────────────────────────────────────────────────
 
-func (s *Service) ListRoutings(ctx context.Context, tenantID uint) ([]Routing, error) {
-	return s.repo.ListRoutings(ctx, tenantID)
+func (s *Service) CountRoutings(ctx context.Context, tenantID uint) (int64, error) {
+	return s.repo.CountRoutings(ctx, tenantID)
+}
+
+func (s *Service) ListRoutings(ctx context.Context, tenantID uint, limit, offset int) ([]Routing, error) {
+	return s.repo.ListRoutings(ctx, tenantID, limit, offset)
 }
 
 func (s *Service) GetRouting(ctx context.Context, tenantID, id uint) (*Routing, error) {
