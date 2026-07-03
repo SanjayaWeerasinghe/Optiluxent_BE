@@ -33,6 +33,7 @@ type Repository interface {
 
 	// Material Requests
 	ListMRs(ctx context.Context, tenantID uint, status string) ([]MaterialRequest, error)
+	ListMRsByMO(ctx context.Context, tenantID, moID uint) ([]MaterialRequest, error)
 	GetMR(ctx context.Context, tenantID, id uint) (*MaterialRequest, error)
 	CreateMR(ctx context.Context, mr *MaterialRequest) error
 	UpdateMR(ctx context.Context, mr *MaterialRequest) error
@@ -45,6 +46,7 @@ type Repository interface {
 
 	// Goods Transfers
 	ListTransfers(ctx context.Context, tenantID uint, status string) ([]GoodsTransfer, error)
+	ListTransfersByMO(ctx context.Context, tenantID, moID uint) ([]GoodsTransfer, error)
 	GetTransfer(ctx context.Context, tenantID, id uint) (*GoodsTransfer, error)
 	CreateTransfer(ctx context.Context, t *GoodsTransfer) error
 	UpdateTransfer(ctx context.Context, t *GoodsTransfer) error
@@ -57,6 +59,7 @@ type Repository interface {
 
 	// Goods Issues
 	ListIssues(ctx context.Context, tenantID uint, status, reason string) ([]GoodsIssue, error)
+	ListIssuesByMO(ctx context.Context, tenantID, moID uint) ([]GoodsIssue, error)
 	GetIssue(ctx context.Context, tenantID, id uint) (*GoodsIssue, error)
 	CreateIssue(ctx context.Context, gi *GoodsIssue) error
 	UpdateIssue(ctx context.Context, gi *GoodsIssue) error
@@ -79,6 +82,7 @@ type Repository interface {
 
 	// Quality Checks
 	ListQualityChecks(ctx context.Context, tenantID uint, status string) ([]QualityCheck, error)
+	ListQCsByRefs(ctx context.Context, tenantID uint, refType string, refIDs []uint) ([]QualityCheck, error)
 	GetQualityCheck(ctx context.Context, tenantID, id uint) (*QualityCheck, error)
 	CreateQualityCheck(ctx context.Context, qc *QualityCheck) error
 	UpdateQualityCheckStatus(ctx context.Context, tenantID, id uint, status string) error
@@ -166,6 +170,13 @@ func (r *dbRepository) ListMRs(ctx context.Context, tenantID uint, status string
 	return rows, q.Order("created_at DESC").Find(&rows).Error
 }
 
+func (r *dbRepository) ListMRsByMO(ctx context.Context, tenantID, moID uint) ([]MaterialRequest, error) {
+	var rows []MaterialRequest
+	return rows, r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND mo_id = ?", tenantID, moID).
+		Order("created_at DESC").Find(&rows).Error
+}
+
 func (r *dbRepository) GetMR(ctx context.Context, tenantID, id uint) (*MaterialRequest, error) {
 	var mr MaterialRequest
 	err := r.db.WithContext(ctx).Preload("Lines").
@@ -230,6 +241,13 @@ func (r *dbRepository) ListTransfers(ctx context.Context, tenantID uint, status 
 	}
 	var rows []GoodsTransfer
 	return rows, q.Order("created_at DESC").Find(&rows).Error
+}
+
+func (r *dbRepository) ListTransfersByMO(ctx context.Context, tenantID, moID uint) ([]GoodsTransfer, error) {
+	var rows []GoodsTransfer
+	return rows, r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND mo_id = ?", tenantID, moID).
+		Order("created_at DESC").Find(&rows).Error
 }
 
 func (r *dbRepository) GetTransfer(ctx context.Context, tenantID, id uint) (*GoodsTransfer, error) {
@@ -362,6 +380,13 @@ func (r *dbRepository) ListIssues(ctx context.Context, tenantID uint, status, re
 	}
 	var rows []GoodsIssue
 	return rows, q.Order("created_at DESC").Find(&rows).Error
+}
+
+func (r *dbRepository) ListIssuesByMO(ctx context.Context, tenantID, moID uint) ([]GoodsIssue, error) {
+	var rows []GoodsIssue
+	return rows, r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND reference_type = ? AND reference_id = ?", tenantID, "PRODUCTION_ORDER", moID).
+		Order("created_at DESC").Find(&rows).Error
 }
 
 func (r *dbRepository) GetIssue(ctx context.Context, tenantID, id uint) (*GoodsIssue, error) {
@@ -572,6 +597,16 @@ func (r *dbRepository) ListQualityChecks(ctx context.Context, tenantID uint, sta
 	}
 	var rows []QualityCheck
 	return rows, q.Order("created_at DESC").Find(&rows).Error
+}
+
+func (r *dbRepository) ListQCsByRefs(ctx context.Context, tenantID uint, refType string, refIDs []uint) ([]QualityCheck, error) {
+	if len(refIDs) == 0 {
+		return nil, nil
+	}
+	var rows []QualityCheck
+	return rows, r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND reference_type = ? AND reference_id IN ?", tenantID, refType, refIDs).
+		Order("created_at DESC").Find(&rows).Error
 }
 
 func (r *dbRepository) GetQualityCheck(ctx context.Context, tenantID, id uint) (*QualityCheck, error) {

@@ -16,6 +16,7 @@ type MaterialRequest struct {
 	ID           uint       `json:"id"            gorm:"primaryKey"`
 	TenantID     uint       `json:"tenant_id"     gorm:"not null;index"`
 	Code         string     `json:"code"          gorm:"not null;size:50"`
+	MOID         *uint      `json:"mo_id"`
 	RequestedBy  uint       `json:"requested_by"  gorm:"not null"`
 	DepartmentID *uint      `json:"department_id"`
 	WarehouseID  uint       `json:"warehouse_id"  gorm:"not null"`
@@ -65,6 +66,7 @@ type GoodsTransfer struct {
 	ID              uint       `json:"id"               gorm:"primaryKey"`
 	TenantID        uint       `json:"tenant_id"        gorm:"not null;index"`
 	Code            string     `json:"code"             gorm:"not null;size:50"`
+	MOID            *uint      `json:"mo_id"`
 	FromWarehouseID uint       `json:"from_warehouse_id" gorm:"not null"`
 	ToWarehouseID   uint       `json:"to_warehouse_id"  gorm:"not null"`
 	TransferDate    string     `json:"transfer_date"    gorm:"type:date;not null"`

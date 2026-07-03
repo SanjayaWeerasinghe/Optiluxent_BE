@@ -38,7 +38,7 @@ func (m *Module) Dependencies() []string { return []string{"masterdata", "invent
 func (m *Module) Service() *Service { return m.svc }
 
 func (m *Module) Initialize(deps modules.Dependencies) error {
-	m.svc = NewService(NewRepository(deps.DB))
+	m.svc = NewService(NewRepository(deps.DB), deps.DB)
 	return nil
 }
 

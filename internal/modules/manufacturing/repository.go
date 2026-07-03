@@ -34,6 +34,7 @@ type Repository interface {
 	// Production Orders
 	ListOrders(ctx context.Context, tenantID uint, status string) ([]ProductionOrder, error)
 	GetOrder(ctx context.Context, tenantID, id uint) (*ProductionOrder, error)
+	IncrementProducedQty(ctx context.Context, tenantID, id uint, delta float64) error
 	CreateOrder(ctx context.Context, order *ProductionOrder) error
 	UpdateOrder(ctx context.Context, order *ProductionOrder) error
 	DeleteOrder(ctx context.Context, tenantID, id uint) error
@@ -199,6 +200,16 @@ func (r *dbRepository) CreateOrder(ctx context.Context, order *ProductionOrder) 
 
 func (r *dbRepository) UpdateOrder(ctx context.Context, order *ProductionOrder) error {
 	return r.db.WithContext(ctx).Save(order).Error
+}
+
+// IncrementProducedQty adds delta (may be negative) to the order's
+// produced_qty atomically so concurrent GRN confirms can't clobber each other.
+func (r *dbRepository) IncrementProducedQty(ctx context.Context, tenantID, id uint, delta float64) error {
+	return r.db.WithContext(ctx).Exec(
+		`UPDATE production_orders SET produced_qty = produced_qty + ?, updated_at = NOW()
+		 WHERE tenant_id = ? AND id = ?`,
+		delta, tenantID, id,
+	).Error
 }
 
 func (r *dbRepository) DeleteOrder(ctx context.Context, tenantID, id uint) error {

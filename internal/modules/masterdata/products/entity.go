@@ -43,10 +43,12 @@ type Product struct {
 	Description    string         `json:"description"`
 	ProductType    string         `json:"product_type"    gorm:"not null;size:20;default:FINISHED"`
 	CategoryID     *uint          `json:"category_id"`
-	BaseUOMID      uint           `json:"base_uom_id"     gorm:"not null"`
-	PurchaseUOMID  *uint          `json:"purchase_uom_id"`
-	SalesUOMID     *uint          `json:"sales_uom_id"`
-	TaxCodeID      *uint          `json:"tax_code_id"`
+	BaseUOMID       uint           `json:"base_uom_id"       gorm:"not null"`
+	PurchaseUOMID   *uint          `json:"purchase_uom_id"`
+	SalesUOMID      *uint          `json:"sales_uom_id"`
+	StockUOMID      *uint          `json:"stock_uom_id"`
+	ProductionUOMID *uint          `json:"production_uom_id"`
+	TaxCodeID       *uint          `json:"tax_code_id"`
 	CostPrice      float64        `json:"cost_price"      gorm:"not null;default:0"`
 	StandardPrice  float64        `json:"standard_price"  gorm:"not null;default:0"`
 	MinStockQty    float64        `json:"min_stock_qty"   gorm:"not null;default:0"`

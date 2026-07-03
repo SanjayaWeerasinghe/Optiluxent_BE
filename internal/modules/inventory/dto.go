@@ -3,6 +3,7 @@ package inventory
 // ── Material Request DTOs ─────────────────────────────────────────────────────
 
 type CreateMRRequest struct {
+	MOID         *uint  `json:"mo_id"`
 	RequestedBy  uint   `json:"requested_by"  validate:"required"`
 	DepartmentID *uint  `json:"department_id"`
 	WarehouseID  uint   `json:"warehouse_id"  validate:"required"`
@@ -40,6 +41,7 @@ type UpdateMRLineRequest struct {
 // ── Goods Transfer DTOs ───────────────────────────────────────────────────────
 
 type CreateTransferRequest struct {
+	MOID            *uint  `json:"mo_id"`
 	FromWarehouseID uint   `json:"from_warehouse_id" validate:"required"`
 	ToWarehouseID   uint   `json:"to_warehouse_id"   validate:"required"`
 	TransferDate    string `json:"transfer_date"     validate:"omitempty"`

@@ -301,6 +301,22 @@ func (h *Handler) GetOrder(c *fiber.Ctx) error {
 	return httputil.Success(c, "production order retrieved", order)
 }
 
+// GetOrderDashboard is the aggregation endpoint the FE opens when someone
+// clicks a Manufacturing Order — one packet with the order + all linked MRs,
+// issues, transfers, GRNs and QCs plus a totals block already normalised to
+// the order's UOM.
+func (h *Handler) GetOrderDashboard(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	dash, err := h.svc.GetDashboard(c.Context(), tenantFromCtx(c), id)
+	if err != nil {
+		return httputil.NotFound(c, err.Error())
+	}
+	return httputil.Success(c, "dashboard retrieved", dash)
+}
+
 func (h *Handler) CreateOrder(c *fiber.Ctx) error {
 	var req CreateOrderRequest
 	if err := c.BodyParser(&req); err != nil {

@@ -135,6 +135,7 @@ const (
 	GRNTypeWithoutPO         = "WITHOUT_PO"         // ad-hoc supplier delivery (no PO) → Material QC
 	GRNTypeCustomerReturn    = "CUSTOMER_RETURN"    // goods returned by customer → no QC
 	GRNTypeProductionReturn  = "PRODUCTION_RETURN"  // goods returned from production floor → no QC
+	GRNTypeProductionOutput  = "PRODUCTION_OUTPUT"  // finished goods from a Manufacturing Order → Product QC + bumps MO.produced_qty
 )
 
 type GoodsReceipt struct {
@@ -143,6 +144,7 @@ type GoodsReceipt struct {
 	Code        string         `json:"code"         gorm:"not null;size:50"`
 	GRNType     string         `json:"grn_type"     gorm:"not null;size:30;default:WITH_PO"`
 	POID        *uint          `json:"po_id"`
+	MOID        *uint          `json:"mo_id"`
 	SupplierID  uint           `json:"supplier_id"  gorm:"not null"`
 	ReceiptDate string         `json:"receipt_date" gorm:"type:date;not null"`
 	WarehouseID uint           `json:"warehouse_id" gorm:"not null"`

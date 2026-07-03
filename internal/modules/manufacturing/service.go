@@ -9,6 +9,7 @@ import (
 	"erp-system/internal/infrastructure/events"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // QCAutoCreator is the minimal interface manufacturing needs from the inventory
@@ -33,14 +34,36 @@ type QCAutoCreator interface {
 
 // Service contains all manufacturing business logic.
 type Service struct {
-	repo Repository
-	bus  events.EventBus
-	qc   QCAutoCreator
+	repo        Repository
+	db          *gorm.DB // used by the dashboard aggregator + uom converter
+	bus         events.EventBus
+	qc          QCAutoCreator
+	dashReaders DashboardReaders
 }
 
-func NewService(repo Repository) *Service             { return &Service{repo: repo} }
+func NewService(repo Repository, db *gorm.DB) *Service { return &Service{repo: repo, db: db} }
 func (s *Service) SetEventBus(bus events.EventBus)    { s.bus = bus }
 func (s *Service) SetQCAutoCreator(qc QCAutoCreator)  { s.qc = qc }
+
+// BumpProducedQty adds the given quantity to a Manufacturing Order's produced_qty,
+// converting the caller's UOM to the MO's UOM via product_uom_conversions when needed.
+// Called by procurement.ConfirmGRN when a PRODUCTION_OUTPUT GRN is confirmed.
+func (s *Service) BumpProducedQty(ctx context.Context, tenantID, moID, productID, uomID uint, qty float64) error {
+	order, err := s.repo.GetOrder(ctx, tenantID, moID)
+	if err != nil {
+		return fmt.Errorf("production order not found: %w", err)
+	}
+	// If the caller UOM matches the MO UOM, no conversion needed. Otherwise
+	// look up the ratio; fall back to raw qty if none configured so we still
+	// see something in the total.
+	delta := qty
+	if uomID != order.UOMID {
+		if converted, ok := ConvertProductQty(ctx, s.db, productID, uomID, order.UOMID, qty); ok {
+			delta = converted
+		}
+	}
+	return s.repo.IncrementProducedQty(ctx, tenantID, moID, delta)
+}
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {

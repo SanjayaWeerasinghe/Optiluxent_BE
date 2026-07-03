@@ -32,15 +32,25 @@ type QCAutoCreator interface {
 	) error
 }
 
+// MOProducedBumper is the minimal interface procurement needs from the
+// manufacturing module to increment ProductionOrder.produced_qty when a
+// PRODUCTION_OUTPUT GRN is confirmed. manufacturing.Service satisfies this
+// via its BumpProducedQty method.
+type MOProducedBumper interface {
+	BumpProducedQty(ctx context.Context, tenantID, moID, productID, uomID uint, qty float64) error
+}
+
 type Service struct {
 	repo Repository
 	bus  events.EventBus
 	qc   QCAutoCreator
+	mo   MOProducedBumper
 }
 
-func NewService(repo Repository) *Service                      { return &Service{repo: repo} }
-func (s *Service) SetEventBus(bus events.EventBus)             { s.bus = bus }
-func (s *Service) SetQCAutoCreator(qc QCAutoCreator)           { s.qc = qc }
+func NewService(repo Repository) *Service                        { return &Service{repo: repo} }
+func (s *Service) SetEventBus(bus events.EventBus)               { s.bus = bus }
+func (s *Service) SetQCAutoCreator(qc QCAutoCreator)             { s.qc = qc }
+func (s *Service) SetMOProducedBumper(mo MOProducedBumper)       { s.mo = mo }
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {
@@ -517,6 +527,10 @@ func (s *Service) DeletePOItem(ctx context.Context, tenantID, poID, itemID uint)
 
 // ── Goods Receipts ────────────────────────────────────────────────────────────
 
+func (s *Service) ListGRNsByMO(ctx context.Context, tenantID, moID uint) ([]GoodsReceipt, error) {
+	return s.repo.ListGRNsByMO(ctx, tenantID, moID)
+}
+
 func (s *Service) ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint) ([]GoodsReceipt, error) {
 	return s.repo.ListGRNs(ctx, tenantID, status, poID)
 }
@@ -542,9 +556,12 @@ func (s *Service) CreateGRN(ctx context.Context, tenantID, userID uint, req *Cre
 	}
 	grnType := req.GRNType
 	if grnType == "" {
-		if req.POID != nil {
+		switch {
+		case req.MOID != nil:
+			grnType = GRNTypeProductionOutput
+		case req.POID != nil:
 			grnType = GRNTypeWithPO
-		} else {
+		default:
 			grnType = GRNTypeWithoutPO
 		}
 	}
@@ -553,6 +570,7 @@ func (s *Service) CreateGRN(ctx context.Context, tenantID, userID uint, req *Cre
 		Code:        code,
 		GRNType:     grnType,
 		POID:        req.POID,
+		MOID:        req.MOID,
 		SupplierID:  req.SupplierID,
 		ReceiptDate: d,
 		WarehouseID: req.WarehouseID,
@@ -581,21 +599,40 @@ func (s *Service) ConfirmGRN(ctx context.Context, tenantID, id, userID uint) err
 	if grn.POID != nil {
 		s.appendGRNLinesToDraftInvoice(ctx, tenantID, grn)
 	}
-	// Auto-create a Material QC for WITH_PO / WITHOUT_PO GRNs.
-	// Customer/Production returns don't go through QC.
-	if s.qc != nil && (grn.GRNType == GRNTypeWithPO || grn.GRNType == GRNTypeWithoutPO) {
-		lines := make([]QCAutoLine, 0, len(grn.Lines))
-		for _, gl := range grn.Lines {
-			lines = append(lines, QCAutoLine{
-				ProductID: gl.ProductID,
-				VariantID: gl.VariantID,
-				Quantity:  gl.Quantity,
-			})
+	// Auto-create a QC for GRNs whose type warrants one.
+	// WITH_PO / WITHOUT_PO           → MATERIAL_QC (inbound goods)
+	// PRODUCTION_OUTPUT              → PRODUCT_QC  (own production, bottled goods)
+	// CUSTOMER_RETURN / PRODUCTION_RETURN → no QC.
+	if s.qc != nil {
+		var qcType string
+		switch grn.GRNType {
+		case GRNTypeWithPO, GRNTypeWithoutPO:
+			qcType = "MATERIAL_QC"
+		case GRNTypeProductionOutput:
+			qcType = "PRODUCT_QC"
 		}
-		_ = s.qc.CreateAutoQC(ctx, tenantID, userID,
-			"MATERIAL_QC", "GRN", grn.ID, grn.WarehouseID,
-			"Auto-created from "+grn.Code+" ("+grn.GRNType+")",
-			lines)
+		if qcType != "" {
+			lines := make([]QCAutoLine, 0, len(grn.Lines))
+			for _, gl := range grn.Lines {
+				lines = append(lines, QCAutoLine{
+					ProductID: gl.ProductID,
+					VariantID: gl.VariantID,
+					Quantity:  gl.Quantity,
+				})
+			}
+			_ = s.qc.CreateAutoQC(ctx, tenantID, userID,
+				qcType, "GRN", grn.ID, grn.WarehouseID,
+				"Auto-created from "+grn.Code+" ("+grn.GRNType+")",
+				lines)
+		}
+	}
+	// Bump the Manufacturing Order's produced_qty for PRODUCTION_OUTPUT GRNs.
+	// Best-effort — the dashboard also aggregates directly from GRNs, so this
+	// keeps the denormalised order.produced_qty in sync for legacy reads.
+	if s.mo != nil && grn.GRNType == GRNTypeProductionOutput && grn.MOID != nil {
+		for _, gl := range grn.Lines {
+			_ = s.mo.BumpProducedQty(ctx, tenantID, *grn.MOID, gl.ProductID, gl.UOMID, gl.Quantity)
+		}
 	}
 	return nil
 }

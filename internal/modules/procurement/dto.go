@@ -92,9 +92,10 @@ type UpdatePOItemRequest struct {
 // ── Goods Receipt DTOs ────────────────────────────────────────────────────────
 
 type CreateGRNRequest struct {
-	GRNType     string  `json:"grn_type"     validate:"omitempty,oneof=WITH_PO WITHOUT_PO CUSTOMER_RETURN PRODUCTION_RETURN"`
+	GRNType     string  `json:"grn_type"     validate:"omitempty,oneof=WITH_PO WITHOUT_PO CUSTOMER_RETURN PRODUCTION_RETURN PRODUCTION_OUTPUT"`
 	POID        *uint   `json:"po_id"`
-	SupplierID  uint    `json:"supplier_id"  validate:"required"`
+	MOID        *uint   `json:"mo_id"`
+	SupplierID  uint    `json:"supplier_id"  validate:"omitempty"`
 	ReceiptDate string  `json:"receipt_date" validate:"omitempty"`
 	WarehouseID uint    `json:"warehouse_id" validate:"required"`
 	Notes       string  `json:"notes"`

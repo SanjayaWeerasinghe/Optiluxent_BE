@@ -201,6 +201,105 @@ func main() {
 		mfgModule.Service().SetQCAutoCreator(mfgQCAdapter{inv: invSvc})
 		logger.Info("QC auto-creator wired into procurement and manufacturing")
 	}
+	// PRODUCTION_OUTPUT GRNs bump the source Manufacturing Order's produced_qty.
+	if mfgSvc := mfgModule.Service(); mfgSvc != nil {
+		procModule.Service().SetMOProducedBumper(mfgSvc)
+		logger.Info("MO produced-qty bumper wired into procurement")
+	}
+	// MO dashboard readers — one function per source list. Each adapter maps
+	// the source module's rich types down to the lightweight dashboard row
+	// types manufacturing works with.
+	if mfgSvc := mfgModule.Service(); mfgSvc != nil {
+		invSvc := invModule.Service()
+		procSvc := procModule.Service()
+		mfgSvc.SetDashboardReaders(manufacturing.DashboardReaders{
+			ListMRsByMO: func(ctx context.Context, tenantID, moID uint) ([]manufacturing.LinkedMR, error) {
+				rows, err := invSvc.ListMRsByMO(ctx, tenantID, moID)
+				if err != nil {
+					return nil, err
+				}
+				out := make([]manufacturing.LinkedMR, 0, len(rows))
+				for _, r := range rows {
+					lines := make([]manufacturing.MRLineRow, 0, len(r.Lines))
+					for _, l := range r.Lines {
+						lines = append(lines, manufacturing.MRLineRow{
+							ProductID: l.ProductID, UOMID: l.UOMId,
+							RequestedQty: l.RequestedQty, IssuedQty: l.IssuedQty,
+						})
+					}
+					out = append(out, manufacturing.LinkedMR{ID: r.ID, Code: r.Code, Status: r.Status, Lines: lines})
+				}
+				return out, nil
+			},
+			ListGIsByMO: func(ctx context.Context, tenantID, moID uint) ([]manufacturing.LinkedGI, error) {
+				rows, err := invSvc.ListIssuesByMO(ctx, tenantID, moID)
+				if err != nil {
+					return nil, err
+				}
+				out := make([]manufacturing.LinkedGI, 0, len(rows))
+				for _, r := range rows {
+					lines := make([]manufacturing.StockLineRow, 0, len(r.Lines))
+					for _, l := range r.Lines {
+						lines = append(lines, manufacturing.StockLineRow{ProductID: l.ProductID, UOMID: l.UOMId, Quantity: l.Quantity})
+					}
+					out = append(out, manufacturing.LinkedGI{ID: r.ID, Code: r.Code, Status: r.Status, Lines: lines})
+				}
+				return out, nil
+			},
+			ListGTsByMO: func(ctx context.Context, tenantID, moID uint) ([]manufacturing.LinkedGT, error) {
+				rows, err := invSvc.ListTransfersByMO(ctx, tenantID, moID)
+				if err != nil {
+					return nil, err
+				}
+				out := make([]manufacturing.LinkedGT, 0, len(rows))
+				for _, r := range rows {
+					lines := make([]manufacturing.StockLineRow, 0, len(r.Lines))
+					for _, l := range r.Lines {
+						lines = append(lines, manufacturing.StockLineRow{ProductID: l.ProductID, UOMID: l.UOMId, Quantity: l.Quantity})
+					}
+					out = append(out, manufacturing.LinkedGT{ID: r.ID, Code: r.Code, Status: r.Status, Lines: lines})
+				}
+				return out, nil
+			},
+			ListGRNsByMO: func(ctx context.Context, tenantID, moID uint) ([]manufacturing.LinkedGRN, error) {
+				rows, err := procSvc.ListGRNsByMO(ctx, tenantID, moID)
+				if err != nil {
+					return nil, err
+				}
+				out := make([]manufacturing.LinkedGRN, 0, len(rows))
+				for _, r := range rows {
+					lines := make([]manufacturing.StockLineRow, 0, len(r.Lines))
+					for _, l := range r.Lines {
+						lines = append(lines, manufacturing.StockLineRow{ProductID: l.ProductID, UOMID: l.UOMID, Quantity: l.Quantity})
+					}
+					out = append(out, manufacturing.LinkedGRN{ID: r.ID, Code: r.Code, Status: r.Status, GRNType: r.GRNType, Lines: lines})
+				}
+				return out, nil
+			},
+			ListQCsForGRNs: func(ctx context.Context, tenantID uint, grnIDs []uint) ([]manufacturing.LinkedQC, error) {
+				rows, err := invSvc.ListQCsByGRNIDs(ctx, tenantID, grnIDs)
+				if err != nil {
+					return nil, err
+				}
+				out := make([]manufacturing.LinkedQC, 0, len(rows))
+				for _, r := range rows {
+					var checked, passed, failed float64
+					for _, l := range r.Lines {
+						checked += l.QtyChecked
+						passed  += l.QtyPassed
+						failed  += l.QtyFailed
+					}
+					out = append(out, manufacturing.LinkedQC{
+						ID: r.ID, Code: r.Code, QCType: r.QCType, Status: r.Status,
+						QtyChecked: checked, QtyPassed: passed, QtyFailed: failed,
+						RefType: r.ReferenceType, RefID: r.ReferenceID,
+					})
+				}
+				return out, nil
+			},
+		})
+		logger.Info("MO dashboard readers wired")
+	}
 
 	logger.Info("All components initialised")
 

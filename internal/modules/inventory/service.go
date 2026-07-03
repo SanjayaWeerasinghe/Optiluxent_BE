@@ -21,6 +21,25 @@ func today() string { return time.Now().Format("2006-01-02") }
 
 // ── Material Requests ─────────────────────────────────────────────────────────
 
+func (s *Service) ListMRsByMO(ctx context.Context, tenantID, moID uint) ([]MaterialRequest, error) {
+	return s.repo.ListMRsByMO(ctx, tenantID, moID)
+}
+
+func (s *Service) ListTransfersByMO(ctx context.Context, tenantID, moID uint) ([]GoodsTransfer, error) {
+	return s.repo.ListTransfersByMO(ctx, tenantID, moID)
+}
+
+func (s *Service) ListIssuesByMO(ctx context.Context, tenantID, moID uint) ([]GoodsIssue, error) {
+	return s.repo.ListIssuesByMO(ctx, tenantID, moID)
+}
+
+// ListQCsByGRNIDs returns the QC records whose reference_type is 'GRN' and
+// reference_id is in the given list. Used by the MO dashboard to compute
+// pass/fail metrics on production output GRNs.
+func (s *Service) ListQCsByGRNIDs(ctx context.Context, tenantID uint, grnIDs []uint) ([]QualityCheck, error) {
+	return s.repo.ListQCsByRefs(ctx, tenantID, "GRN", grnIDs)
+}
+
 func (s *Service) ListMRs(ctx context.Context, tenantID uint, status string) ([]MaterialRequest, error) {
 	return s.repo.ListMRs(ctx, tenantID, status)
 }
@@ -41,6 +60,7 @@ func (s *Service) CreateMR(ctx context.Context, tenantID, userID uint, req *Crea
 	mr := &MaterialRequest{
 		TenantID:     tenantID,
 		Code:         code,
+		MOID:         req.MOID,
 		RequestedBy:  req.RequestedBy,
 		DepartmentID: req.DepartmentID,
 		WarehouseID:  req.WarehouseID,
@@ -183,6 +203,7 @@ func (s *Service) CreateTransfer(ctx context.Context, tenantID, userID uint, req
 	t := &GoodsTransfer{
 		TenantID:        tenantID,
 		Code:            code,
+		MOID:            req.MOID,
 		FromWarehouseID: req.FromWarehouseID,
 		ToWarehouseID:   req.ToWarehouseID,
 		TransferDate:    d,
@@ -375,7 +396,41 @@ func (s *Service) ConfirmIssue(ctx context.Context, tenantID, id, userID uint) e
 	if len(gi.Lines) == 0 {
 		return fmt.Errorf("goods issue must have at least one line")
 	}
-	return s.repo.ConfirmIssue(ctx, tenantID, id, userID)
+	if err := s.repo.ConfirmIssue(ctx, tenantID, id, userID); err != nil {
+		return err
+	}
+	// If this GI is a production issue (reference_type=PRODUCTION_ORDER),
+	// walk all MRs linked to the same MO and bump each MR line's
+	// issued_qty by the matching product's issued quantity.
+	// Best-effort — a failure here doesn't unwind the GI confirmation.
+	if gi.ReferenceType == "PRODUCTION_ORDER" && gi.ReferenceID != nil {
+		s.bumpMRIssuedQtyForMO(ctx, tenantID, *gi.ReferenceID, gi.Lines)
+	}
+	return nil
+}
+
+// bumpMRIssuedQtyForMO adds each GI line's quantity onto the matching MR line
+// (by product_id) across every MR that references the same MO.
+func (s *Service) bumpMRIssuedQtyForMO(ctx context.Context, tenantID, moID uint, giLines []GILine) {
+	mrs, err := s.repo.ListMRsByMO(ctx, tenantID, moID)
+	if err != nil || len(mrs) == 0 {
+		return
+	}
+	// Sum GI qty per product so a GI issuing the same product twice counts once
+	perProduct := make(map[uint]float64, len(giLines))
+	for _, l := range giLines {
+		perProduct[l.ProductID] += l.Quantity
+	}
+	for i := range mrs {
+		mr := &mrs[i]
+		for j := range mr.Lines {
+			line := &mr.Lines[j]
+			if delta, ok := perProduct[line.ProductID]; ok && delta > 0 {
+				line.IssuedQty += delta
+				_ = s.repo.UpdateMRLine(ctx, line)
+			}
+		}
+	}
 }
 
 func (s *Service) ListIssueLines(ctx context.Context, tenantID, issueID uint) ([]GILine, error) {

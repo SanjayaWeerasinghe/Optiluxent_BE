@@ -49,6 +49,7 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	orders.Get("", canRead, h.ListOrders)
 	orders.Post("", canWrite, auditMW, h.CreateOrder)
 	orders.Get("/:id", canRead, h.GetOrder)
+	orders.Get("/:id/dashboard", canRead, h.GetOrderDashboard)
 	orders.Put("/:id", canWrite, auditMW, h.UpdateOrder)
 	orders.Delete("/:id", canDelete, auditMW, h.DeleteOrder)
 

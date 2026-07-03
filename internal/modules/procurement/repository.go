@@ -50,6 +50,7 @@ type Repository interface {
 
 	// Goods Receipts
 	ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint) ([]GoodsReceipt, error)
+	ListGRNsByMO(ctx context.Context, tenantID, moID uint) ([]GoodsReceipt, error)
 	GetGRN(ctx context.Context, tenantID, id uint) (*GoodsReceipt, error)
 	CreateGRN(ctx context.Context, grn *GoodsReceipt) error
 	UpdateGRN(ctx context.Context, grn *GoodsReceipt) error
@@ -229,6 +230,13 @@ func (r *dbRepository) ListGRNs(ctx context.Context, tenantID uint, status strin
 	}
 	var rows []GoodsReceipt
 	return rows, q.Order("created_at DESC").Find(&rows).Error
+}
+
+func (r *dbRepository) ListGRNsByMO(ctx context.Context, tenantID, moID uint) ([]GoodsReceipt, error) {
+	var rows []GoodsReceipt
+	return rows, r.db.WithContext(ctx).Preload("Lines").
+		Where("tenant_id = ? AND mo_id = ?", tenantID, moID).
+		Order("created_at DESC").Find(&rows).Error
 }
 
 func (r *dbRepository) GetGRN(ctx context.Context, tenantID, id uint) (*GoodsReceipt, error) {
