@@ -206,6 +206,14 @@ func main() {
 		procModule.Service().SetMOProducedBumper(mfgSvc)
 		logger.Info("MO produced-qty bumper wired into procurement")
 	}
+	// DocumentType resolver — the masterdata documenttypes service satisfies
+	// both procurement.DocumentTypeResolver and inventory.DocumentTypeResolver
+	// structurally, no adapter needed.
+	if dtSvc := mdModule.DocumentTypeService(); dtSvc != nil {
+		procModule.Service().SetDocumentTypeResolver(dtSvc)
+		invModule.Service().SetDocumentTypeResolver(dtSvc)
+		logger.Info("Document-type resolver wired into procurement + inventory")
+	}
 	// MO dashboard readers — one function per source list. Each adapter maps
 	// the source module's rich types down to the lightweight dashboard row
 	// types manufacturing works with.
@@ -267,12 +275,19 @@ func main() {
 					return nil, err
 				}
 				out := make([]manufacturing.LinkedGRN, 0, len(rows))
+				docTypeSvc := mdModule.DocumentTypeService()
 				for _, r := range rows {
 					lines := make([]manufacturing.StockLineRow, 0, len(r.Lines))
 					for _, l := range r.Lines {
 						lines = append(lines, manufacturing.StockLineRow{ProductID: l.ProductID, UOMID: l.UOMID, Quantity: l.Quantity})
 					}
-					out = append(out, manufacturing.LinkedGRN{ID: r.ID, Code: r.Code, Status: r.Status, GRNType: r.GRNType, Lines: lines})
+					// Resolve the seeded system_key so the dashboard's PRODUCTION_OUTPUT
+					// filter keeps working after grn_type was dropped from the schema.
+					var grnKey string
+					if r.DocumentTypeID != nil && docTypeSvc != nil {
+						grnKey, _ = docTypeSvc.ResolveSystemKey(ctx, tenantID, *r.DocumentTypeID)
+					}
+					out = append(out, manufacturing.LinkedGRN{ID: r.ID, Code: r.Code, Status: r.Status, GRNType: grnKey, Lines: lines})
 				}
 				return out, nil
 			},
@@ -281,6 +296,7 @@ func main() {
 				if err != nil {
 					return nil, err
 				}
+				docTypeSvc := mdModule.DocumentTypeService()
 				out := make([]manufacturing.LinkedQC, 0, len(rows))
 				for _, r := range rows {
 					var checked, passed, failed float64
@@ -289,8 +305,14 @@ func main() {
 						passed  += l.QtyPassed
 						failed  += l.QtyFailed
 					}
+					// Resolve qc_type via the Type's system_key so the dashboard's
+					// MATERIAL_QC vs PRODUCT_QC filters keep working.
+					var qcKey string
+					if r.DocumentTypeID != nil && docTypeSvc != nil {
+						qcKey, _ = docTypeSvc.ResolveSystemKey(ctx, tenantID, *r.DocumentTypeID)
+					}
 					out = append(out, manufacturing.LinkedQC{
-						ID: r.ID, Code: r.Code, QCType: r.QCType, Status: r.Status,
+						ID: r.ID, Code: r.Code, QCType: qcKey, Status: r.Status,
 						QtyChecked: checked, QtyPassed: passed, QtyFailed: failed,
 						RefType: r.ReferenceType, RefID: r.ReferenceID,
 					})

@@ -17,9 +17,10 @@ const (
 )
 
 type PurchaseRequest struct {
-	ID           uint           `json:"id"            gorm:"primaryKey"`
-	TenantID     uint           `json:"tenant_id"     gorm:"not null;index"`
-	Code         string         `json:"code"          gorm:"not null;size:50"`
+	ID             uint           `json:"id"            gorm:"primaryKey"`
+	TenantID       uint           `json:"tenant_id"     gorm:"not null;index"`
+	Code           string         `json:"code"          gorm:"not null;size:50"`
+	DocumentTypeID *uint          `json:"document_type_id"`
 	RequestDate  string         `json:"request_date"  gorm:"type:date;not null"`
 	RequiredDate *string        `json:"required_date" gorm:"type:date"`
 	RequestedBy  *uint          `json:"requested_by"`
@@ -71,6 +72,7 @@ type PurchaseOrder struct {
 	ID             uint           `json:"id"              gorm:"primaryKey"`
 	TenantID       uint           `json:"tenant_id"       gorm:"not null;index"`
 	Code           string         `json:"code"            gorm:"not null;size:50"`
+	DocumentTypeID *uint          `json:"document_type_id"`
 	SupplierID     uint           `json:"supplier_id"     gorm:"not null;index"`
 	PRID           *uint          `json:"pr_id"`
 	OrderDate      string         `json:"order_date"      gorm:"type:date;not null"`
@@ -129,23 +131,25 @@ const (
 	GRNStatusCancelled = "CANCELLED"
 )
 
-// GRN types — determines downstream behaviour like QC auto-creation.
+// GRN behavioural system_keys — these live on rows in `document_types`
+// with system_key set. The BE branches on the resolved key.
+// See migration 000033 for the seed.
 const (
-	GRNTypeWithPO            = "WITH_PO"            // standard supplier delivery against a PO → Material QC
-	GRNTypeWithoutPO         = "WITHOUT_PO"         // ad-hoc supplier delivery (no PO) → Material QC
-	GRNTypeCustomerReturn    = "CUSTOMER_RETURN"    // goods returned by customer → no QC
-	GRNTypeProductionReturn  = "PRODUCTION_RETURN"  // goods returned from production floor → no QC
-	GRNTypeProductionOutput  = "PRODUCTION_OUTPUT"  // finished goods from a Manufacturing Order → Product QC + bumps MO.produced_qty
+	GRNTypeWithPO            = "WITH_PO"
+	GRNTypeWithoutPO         = "WITHOUT_PO"
+	GRNTypeCustomerReturn    = "CUSTOMER_RETURN"
+	GRNTypeProductionReturn  = "PRODUCTION_RETURN"
+	GRNTypeProductionOutput  = "PRODUCTION_OUTPUT"
 )
 
 type GoodsReceipt struct {
-	ID          uint           `json:"id"           gorm:"primaryKey"`
-	TenantID    uint           `json:"tenant_id"    gorm:"not null;index"`
-	Code        string         `json:"code"         gorm:"not null;size:50"`
-	GRNType     string         `json:"grn_type"     gorm:"not null;size:30;default:WITH_PO"`
-	POID        *uint          `json:"po_id"`
-	MOID        *uint          `json:"mo_id"`
-	SupplierID  uint           `json:"supplier_id"  gorm:"not null"`
+	ID             uint           `json:"id"                gorm:"primaryKey"`
+	TenantID       uint           `json:"tenant_id"         gorm:"not null;index"`
+	Code           string         `json:"code"              gorm:"not null;size:50"`
+	DocumentTypeID *uint          `json:"document_type_id"`
+	POID           *uint          `json:"po_id"`
+	MOID           *uint          `json:"mo_id"`
+	SupplierID     uint           `json:"supplier_id"       gorm:"not null"`
 	ReceiptDate string         `json:"receipt_date" gorm:"type:date;not null"`
 	WarehouseID uint           `json:"warehouse_id" gorm:"not null"`
 	Status      string         `json:"status"       gorm:"not null;size:20;default:DRAFT"`
@@ -196,6 +200,7 @@ type PurchaseInvoice struct {
 	ID                  uint           `json:"id"                    gorm:"primaryKey"`
 	TenantID            uint           `json:"tenant_id"             gorm:"not null;index"`
 	Code                string         `json:"code"                  gorm:"not null;size:50"`
+	DocumentTypeID      *uint          `json:"document_type_id"`
 	SupplierID          uint           `json:"supplier_id"           gorm:"not null;index"`
 	POID                uint           `json:"po_id"                 gorm:"not null"`
 	InvoiceDate         string         `json:"invoice_date"          gorm:"type:date;not null"`

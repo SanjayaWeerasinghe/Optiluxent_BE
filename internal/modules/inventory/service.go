@@ -9,11 +9,24 @@ import (
 // Service implements all inventory business logic, wrapping the Repository.
 type Service struct {
 	repo Repository
+	dt   DocumentTypeResolver
+}
+
+// DocumentTypeResolver is the tiny interface inventory needs from the
+// masterdata documenttypes service — the same shape as procurement's.
+type DocumentTypeResolver interface {
+	ResolveSystemKey(ctx context.Context, tenantID, id uint) (string, error)
+	FindSystemType(ctx context.Context, tenantID uint, model, systemKey string) (uint, error)
 }
 
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
+
+// SetDocumentTypeResolver is wired at startup from cmd/api/main.go so the
+// service can auto-select seeded Types (e.g. MATERIAL_QC) when a caller
+// doesn't explicitly pick one, and resolve system_key on legacy behaviour.
+func (s *Service) SetDocumentTypeResolver(dt DocumentTypeResolver) { s.dt = dt }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,16 +71,17 @@ func (s *Service) CreateMR(ctx context.Context, tenantID, userID uint, req *Crea
 		d = today()
 	}
 	mr := &MaterialRequest{
-		TenantID:     tenantID,
-		Code:         code,
-		MOID:         req.MOID,
-		RequestedBy:  req.RequestedBy,
-		DepartmentID: req.DepartmentID,
-		WarehouseID:  req.WarehouseID,
-		NeededDate:   d,
-		Status:       MRStatusDraft,
-		Notes:        req.Notes,
-		CreatedBy:    userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: req.DocumentTypeID,
+		MOID:           req.MOID,
+		RequestedBy:    req.RequestedBy,
+		DepartmentID:   req.DepartmentID,
+		WarehouseID:    req.WarehouseID,
+		NeededDate:     d,
+		Status:         MRStatusDraft,
+		Notes:          req.Notes,
+		CreatedBy:      userID,
 	}
 	return mr, s.repo.CreateMR(ctx, mr)
 }
@@ -80,6 +94,7 @@ func (s *Service) UpdateMR(ctx context.Context, tenantID, id uint, req *UpdateMR
 	if mr.Status != MRStatusDraft {
 		return nil, fmt.Errorf("only DRAFT material requests can be edited")
 	}
+	mr.DocumentTypeID = req.DocumentTypeID
 	mr.DepartmentID = req.DepartmentID
 	mr.WarehouseID = req.WarehouseID
 	if req.NeededDate != "" {
@@ -203,6 +218,7 @@ func (s *Service) CreateTransfer(ctx context.Context, tenantID, userID uint, req
 	t := &GoodsTransfer{
 		TenantID:        tenantID,
 		Code:            code,
+		DocumentTypeID:  req.DocumentTypeID,
 		MOID:            req.MOID,
 		FromWarehouseID: req.FromWarehouseID,
 		ToWarehouseID:   req.ToWarehouseID,
@@ -225,6 +241,8 @@ func (s *Service) UpdateTransfer(ctx context.Context, tenantID, id uint, req *Up
 	if req.FromWarehouseID == req.ToWarehouseID {
 		return nil, fmt.Errorf("source and destination warehouses must be different")
 	}
+	t.DocumentTypeID = req.DocumentTypeID
+	t.MOID = req.MOID
 	t.FromWarehouseID = req.FromWarehouseID
 	t.ToWarehouseID = req.ToWarehouseID
 	if req.TransferDate != "" {
@@ -350,16 +368,16 @@ func (s *Service) CreateIssue(ctx context.Context, tenantID, userID uint, req *C
 		d = today()
 	}
 	gi := &GoodsIssue{
-		TenantID:      tenantID,
-		Code:          code,
-		IssueDate:     d,
-		WarehouseID:   req.WarehouseID,
-		IssueReason:   req.IssueReason,
-		ReferenceType: req.ReferenceType,
-		ReferenceID:   req.ReferenceID,
-		Status:        GIStatusDraft,
-		Notes:         req.Notes,
-		CreatedBy:     userID,
+		TenantID:       tenantID,
+		Code:           code,
+		IssueDate:      d,
+		WarehouseID:    req.WarehouseID,
+		DocumentTypeID: req.DocumentTypeID,
+		ReferenceType:  req.ReferenceType,
+		ReferenceID:    req.ReferenceID,
+		Status:         GIStatusDraft,
+		Notes:          req.Notes,
+		CreatedBy:      userID,
 	}
 	return gi, s.repo.CreateIssue(ctx, gi)
 }
@@ -376,7 +394,7 @@ func (s *Service) UpdateIssue(ctx context.Context, tenantID, id uint, req *Updat
 		gi.IssueDate = req.IssueDate
 	}
 	gi.WarehouseID = req.WarehouseID
-	gi.IssueReason = req.IssueReason
+	gi.DocumentTypeID = req.DocumentTypeID
 	gi.ReferenceType = req.ReferenceType
 	gi.ReferenceID = req.ReferenceID
 	if req.Notes != "" {
@@ -528,7 +546,7 @@ func (s *Service) CreateAdjustment(ctx context.Context, tenantID, userID uint, r
 		Code:           code,
 		AdjustmentDate: d,
 		WarehouseID:    req.WarehouseID,
-		AdjustReason:   req.AdjustReason,
+		DocumentTypeID: req.DocumentTypeID,
 		Status:         SAStatusDraft,
 		Notes:          req.Notes,
 		CreatedBy:      userID,
@@ -548,7 +566,7 @@ func (s *Service) UpdateAdjustment(ctx context.Context, tenantID, id uint, req *
 		sa.AdjustmentDate = req.AdjustmentDate
 	}
 	sa.WarehouseID = req.WarehouseID
-	sa.AdjustReason = req.AdjustReason
+	sa.DocumentTypeID = req.DocumentTypeID
 	if req.Notes != "" {
 		sa.Notes = req.Notes
 	}
@@ -657,22 +675,25 @@ func (s *Service) CreateQualityCheck(ctx context.Context, tenantID, userID uint,
 	if d == "" {
 		d = today()
 	}
-	qcType := req.QCType
-	if qcType == "" {
-		qcType = QCTypeMaterial
+	// Auto-select the MATERIAL_QC system Type if the caller didn't pick one.
+	docTypeID := req.DocumentTypeID
+	if docTypeID == nil && s.dt != nil {
+		if id, err := s.dt.FindSystemType(ctx, tenantID, "QC", QCTypeMaterial); err == nil && id != 0 {
+			docTypeID = &id
+		}
 	}
 	qc := &QualityCheck{
-		TenantID:      tenantID,
-		Code:          code,
-		QCType:        qcType,
-		ReferenceType: req.ReferenceType,
-		ReferenceID:   req.ReferenceID,
-		WarehouseID:   req.WarehouseID,
-		CheckDate:     d,
-		Status:        QCStatusPending,
-		InspectorID:   req.InspectorID,
-		Notes:         req.Notes,
-		CreatedBy:     userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: docTypeID,
+		ReferenceType:  req.ReferenceType,
+		ReferenceID:    req.ReferenceID,
+		WarehouseID:    req.WarehouseID,
+		CheckDate:      d,
+		Status:         QCStatusPending,
+		InspectorID:    req.InspectorID,
+		Notes:          req.Notes,
+		CreatedBy:      userID,
 	}
 	return qc, s.repo.CreateQualityCheck(ctx, qc)
 }
@@ -799,17 +820,24 @@ func (s *Service) CreateAutoQC(
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate QC code: %w", err)
 	}
+	// Look up the seeded QC Type row for this qcType key so the FK is set.
+	var docTypeID *uint
+	if s.dt != nil {
+		if id, err := s.dt.FindSystemType(ctx, tenantID, "QC", qcType); err == nil && id != 0 {
+			docTypeID = &id
+		}
+	}
 	qc := &QualityCheck{
-		TenantID:      tenantID,
-		Code:          code,
-		QCType:        qcType,
-		ReferenceType: refType,
-		ReferenceID:   &refID,
-		WarehouseID:   warehouseID,
-		CheckDate:     today(),
-		Status:        QCStatusPending,
-		Notes:         notes,
-		CreatedBy:     userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: docTypeID,
+		ReferenceType:  refType,
+		ReferenceID:    &refID,
+		WarehouseID:    warehouseID,
+		CheckDate:      today(),
+		Status:         QCStatusPending,
+		Notes:          notes,
+		CreatedBy:      userID,
 	}
 	if err := s.repo.CreateQualityCheck(ctx, qc); err != nil {
 		return nil, err

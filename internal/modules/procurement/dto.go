@@ -3,6 +3,7 @@ package procurement
 // ── Purchase Request DTOs ─────────────────────────────────────────────────────
 
 type CreatePRRequest struct {
+	DocumentTypeID *uint   `json:"document_type_id"`
 	RequestDate  string  `json:"request_date"  validate:"omitempty"`
 	RequiredDate *string `json:"required_date"`
 	RequestedBy  *uint   `json:"requested_by"`
@@ -11,6 +12,7 @@ type CreatePRRequest struct {
 }
 
 type UpdatePRRequest struct {
+	DocumentTypeID *uint   `json:"document_type_id"`
 	RequiredDate *string `json:"required_date"`
 	RequestedBy  *uint   `json:"requested_by"`
 	DepartmentID *uint   `json:"department_id"`
@@ -44,6 +46,7 @@ type UpdatePRItemRequest struct {
 // ── Purchase Order DTOs ───────────────────────────────────────────────────────
 
 type CreatePORequest struct {
+	DocumentTypeID *uint   `json:"document_type_id"`
 	SupplierID    uint    `json:"supplier_id"     validate:"required"`
 	PRID          *uint   `json:"pr_id"`
 	OrderDate     string  `json:"order_date"      validate:"omitempty"`
@@ -56,6 +59,7 @@ type CreatePORequest struct {
 }
 
 type UpdatePORequest struct {
+	DocumentTypeID *uint    `json:"document_type_id"`
 	ExpectedDate   *string  `json:"expected_date"`
 	ExchangeRate   *float64 `json:"exchange_rate"`
 	PaymentTermID  *uint    `json:"payment_term_id"`
@@ -92,13 +96,13 @@ type UpdatePOItemRequest struct {
 // ── Goods Receipt DTOs ────────────────────────────────────────────────────────
 
 type CreateGRNRequest struct {
-	GRNType     string  `json:"grn_type"     validate:"omitempty,oneof=WITH_PO WITHOUT_PO CUSTOMER_RETURN PRODUCTION_RETURN PRODUCTION_OUTPUT"`
-	POID        *uint   `json:"po_id"`
-	MOID        *uint   `json:"mo_id"`
-	SupplierID  uint    `json:"supplier_id"  validate:"omitempty"`
-	ReceiptDate string  `json:"receipt_date" validate:"omitempty"`
-	WarehouseID uint    `json:"warehouse_id" validate:"required"`
-	Notes       string  `json:"notes"`
+	DocumentTypeID *uint  `json:"document_type_id"`
+	POID           *uint  `json:"po_id"`
+	MOID           *uint  `json:"mo_id"`
+	SupplierID     uint   `json:"supplier_id"  validate:"omitempty"`
+	ReceiptDate    string `json:"receipt_date" validate:"omitempty"`
+	WarehouseID    uint   `json:"warehouse_id" validate:"required"`
+	Notes          string `json:"notes"`
 }
 
 type AddGRNItemRequest struct {
@@ -127,6 +131,7 @@ type UpdateGRNItemRequest struct {
 // ── Purchase Invoice DTOs ─────────────────────────────────────────────────────
 
 type CreateInvoiceRequest struct {
+	DocumentTypeID      *uint   `json:"document_type_id"`
 	POID                uint    `json:"po_id"                 validate:"required"`
 	SupplierInvoiceNo   string  `json:"supplier_invoice_no"`
 	SupplierInvoiceDate *string `json:"supplier_invoice_date"`

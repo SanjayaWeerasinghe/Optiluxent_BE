@@ -10,6 +10,7 @@ import (
 	inventory "erp-system/internal/modules/inventory"
 	manufacturing "erp-system/internal/modules/manufacturing"
 	masterdata "erp-system/internal/modules/masterdata"
+	"erp-system/internal/modules/masterdata/documenttypes"
 	procurement "erp-system/internal/modules/procurement"
 	sales "erp-system/internal/modules/sales"
 	audithandler "erp-system/internal/interfaces/http/handlers/audit"
@@ -150,6 +151,15 @@ func (s *Server) setupV1Routes(
 
 	// ── Master Data module ─────────────────────────────────────────────────────
 	masterdataModule.RegisterRoutes(protected.Group("/masterdata"))
+
+	// Per-document custom field values live under /documents/:kind/:id/fields.
+	// The code lives in the documenttypes submodule but the URL surfaces at
+	// this sibling root for readability.
+	documenttypes.RegisterDocValueRoutes(
+		protected.Group("/documents"),
+		masterdataModule.DocTypeHandler(),
+		enforcer, auditLogger,
+	)
 
 	// ── Procurement module ─────────────────────────────────────────────────────
 	procurementModule.RegisterRoutes(protected.Group("/procurement"))

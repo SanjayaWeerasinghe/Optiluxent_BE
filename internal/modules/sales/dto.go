@@ -4,6 +4,7 @@ package sales
 
 type CreateSQRequest struct {
 	Code               string  `json:"code"`
+	DocumentTypeID     *uint   `json:"document_type_id"`
 	CustomerID         uint    `json:"customer_id"           validate:"required"`
 	QuotationDate      string  `json:"quotation_date"        validate:"omitempty"`
 	ValidUntil         *string `json:"valid_until"`
@@ -17,6 +18,7 @@ type CreateSQRequest struct {
 }
 
 type UpdateSQRequest struct {
+	DocumentTypeID     *uint    `json:"document_type_id"`
 	ValidUntil         *string  `json:"valid_until"`
 	ExchangeRate       *float64 `json:"exchange_rate"`
 	PaymentTermID      *uint    `json:"payment_term_id"`
@@ -54,6 +56,7 @@ type UpdateSQLineRequest struct {
 
 type CreateSORequest struct {
 	Code                 string  `json:"code"`
+	DocumentTypeID       *uint   `json:"document_type_id"`
 	CustomerID           uint    `json:"customer_id"            validate:"required"`
 	OrderDate            string  `json:"order_date"             validate:"omitempty"`
 	ExpectedDeliveryDate *string `json:"expected_delivery_date"`
@@ -65,6 +68,7 @@ type CreateSORequest struct {
 }
 
 type UpdateSORequest struct {
+	DocumentTypeID       *uint    `json:"document_type_id"`
 	ExpectedDeliveryDate *string  `json:"expected_delivery_date"`
 	ExchangeRate         *float64 `json:"exchange_rate"`
 	PaymentTermID        *uint    `json:"payment_term_id"`
@@ -99,7 +103,8 @@ type UpdateSOLineRequest struct {
 // ── Delivery Order DTOs ───────────────────────────────────────────────────────
 
 type CreateDORequest struct {
-	Code         string  `json:"code"`
+	Code           string  `json:"code"`
+	DocumentTypeID *uint   `json:"document_type_id"`
 	SOID         *uint   `json:"so_id"`
 	CustomerID   uint    `json:"customer_id"   validate:"required"`
 	DeliveryDate string  `json:"delivery_date" validate:"omitempty"`
@@ -108,6 +113,7 @@ type CreateDORequest struct {
 }
 
 type UpdateDORequest struct {
+	DocumentTypeID *uint  `json:"document_type_id"`
 	DeliveryDate *string `json:"delivery_date"`
 	WarehouseID  *uint   `json:"warehouse_id"`
 	Notes        string  `json:"notes"`
@@ -139,6 +145,7 @@ type UpdateDOLineRequest struct {
 
 type CreateSIRequest struct {
 	Code             string  `json:"code"`
+	DocumentTypeID   *uint   `json:"document_type_id"`
 	CustomerID       uint    `json:"customer_id"        validate:"required"`
 	SOID             uint    `json:"so_id"              validate:"required"`
 	InvoiceDate      string  `json:"invoice_date"       validate:"omitempty"`

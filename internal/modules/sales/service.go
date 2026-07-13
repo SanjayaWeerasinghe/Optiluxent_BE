@@ -122,6 +122,7 @@ func (s *Service) CreateSQ(ctx context.Context, tenantID, userID uint, req Creat
 	sq := &SalesQuotation{
 		TenantID:           tenantID,
 		Code:               code,
+		DocumentTypeID:     req.DocumentTypeID,
 		CustomerID:         req.CustomerID,
 		QuotationDate:      d,
 		ValidUntil:         req.ValidUntil,
@@ -152,6 +153,7 @@ func (s *Service) UpdateSQ(ctx context.Context, tenantID, id uint, req UpdateSQR
 	if sq.Status != SQStatusDraft {
 		return nil, fmt.Errorf("only DRAFT quotations can be edited")
 	}
+	sq.DocumentTypeID = req.DocumentTypeID
 	sq.ValidUntil = req.ValidUntil
 	sq.PaymentTermID = req.PaymentTermID
 	if req.ExchangeRate != nil {
@@ -437,6 +439,7 @@ func (s *Service) CreateSO(ctx context.Context, tenantID, userID uint, req Creat
 	so := &SalesOrder{
 		TenantID:             tenantID,
 		Code:                 code,
+		DocumentTypeID:       req.DocumentTypeID,
 		CustomerID:           req.CustomerID,
 		OrderDate:            d,
 		ExpectedDeliveryDate: req.ExpectedDeliveryDate,
@@ -482,6 +485,7 @@ func (s *Service) UpdateSO(ctx context.Context, tenantID, id uint, req UpdateSOR
 	if so.Status != SOStatusDraft {
 		return nil, fmt.Errorf("only DRAFT sales orders can be edited")
 	}
+	so.DocumentTypeID = req.DocumentTypeID
 	so.ExpectedDeliveryDate = req.ExpectedDeliveryDate
 	so.PaymentTermID = req.PaymentTermID
 	if req.ExchangeRate != nil {
@@ -655,15 +659,16 @@ func (s *Service) CreateDO(ctx context.Context, tenantID, userID uint, req Creat
 		d = today()
 	}
 	do := &DeliveryOrder{
-		TenantID:     tenantID,
-		Code:         code,
-		SOID:         req.SOID,
-		CustomerID:   req.CustomerID,
-		DeliveryDate: d,
-		WarehouseID:  req.WarehouseID,
-		Status:       DOStatusDraft,
-		Notes:        req.Notes,
-		CreatedBy:    &userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: req.DocumentTypeID,
+		SOID:           req.SOID,
+		CustomerID:     req.CustomerID,
+		DeliveryDate:   d,
+		WarehouseID:    req.WarehouseID,
+		Status:         DOStatusDraft,
+		Notes:          req.Notes,
+		CreatedBy:      &userID,
 	}
 	if err := s.repo.CreateDO(ctx, do); err != nil {
 		if isDuplicate(err) {
@@ -682,6 +687,7 @@ func (s *Service) UpdateDO(ctx context.Context, tenantID, id uint, req UpdateDOR
 	if do.Status != DOStatusDraft {
 		return nil, fmt.Errorf("only DRAFT delivery orders can be edited")
 	}
+	do.DocumentTypeID = req.DocumentTypeID
 	if req.DeliveryDate != nil {
 		do.DeliveryDate = *req.DeliveryDate
 	}
@@ -882,6 +888,7 @@ func (s *Service) CreateSI(ctx context.Context, tenantID, userID uint, req Creat
 	si := &SalesInvoice{
 		TenantID:         tenantID,
 		Code:             code,
+		DocumentTypeID:   req.DocumentTypeID,
 		CustomerID:       req.CustomerID,
 		SOID:             req.SOID,
 		InvoiceDate:      d,

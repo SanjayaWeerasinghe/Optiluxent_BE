@@ -375,8 +375,12 @@ func (r *dbRepository) ListIssues(ctx context.Context, tenantID uint, status, re
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	// reason filter now matches document_types.system_key on the linked Type.
+	// Kept as a string param so the /issues?reason=PRODUCTION URL still works.
 	if reason != "" {
-		q = q.Where("issue_reason = ?", reason)
+		q = q.Where(`document_type_id IN (
+			SELECT id FROM document_types WHERE tenant_id = ? AND model = 'GI' AND system_key = ?
+		)`, tenantID, reason)
 	}
 	var rows []GoodsIssue
 	return rows, q.Order("created_at DESC").Find(&rows).Error

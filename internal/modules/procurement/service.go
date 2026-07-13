@@ -40,17 +40,40 @@ type MOProducedBumper interface {
 	BumpProducedQty(ctx context.Context, tenantID, moID, productID, uomID uint, qty float64) error
 }
 
+// DocumentTypeResolver looks up seeded Types by system_key and vice-versa.
+// Satisfied by masterdata/documenttypes.Service.
+type DocumentTypeResolver interface {
+	// ResolveSystemKey returns the system_key for a Type id, "" if user-defined.
+	ResolveSystemKey(ctx context.Context, tenantID, id uint) (string, error)
+	// FindSystemType returns the DocumentType id for a (model, system_key)
+	// pair — used when the caller wants to auto-select a system Type by key.
+	FindSystemType(ctx context.Context, tenantID uint, model, systemKey string) (uint, error)
+}
+
 type Service struct {
 	repo Repository
 	bus  events.EventBus
 	qc   QCAutoCreator
 	mo   MOProducedBumper
+	dt   DocumentTypeResolver
 }
 
 func NewService(repo Repository) *Service                        { return &Service{repo: repo} }
 func (s *Service) SetEventBus(bus events.EventBus)               { s.bus = bus }
 func (s *Service) SetQCAutoCreator(qc QCAutoCreator)             { s.qc = qc }
 func (s *Service) SetMOProducedBumper(mo MOProducedBumper)       { s.mo = mo }
+func (s *Service) SetDocumentTypeResolver(dt DocumentTypeResolver) { s.dt = dt }
+
+// resolveDocTypeKey looks up a DocumentType's system_key with a safe fallback.
+// Returns "" (no behavioural switch) if the resolver is not wired, the id is
+// zero, or the Type is user-defined.
+func (s *Service) resolveDocTypeKey(ctx context.Context, tenantID uint, id *uint) string {
+	if s.dt == nil || id == nil || *id == 0 {
+		return ""
+	}
+	key, _ := s.dt.ResolveSystemKey(ctx, tenantID, *id)
+	return key
+}
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {
@@ -137,15 +160,16 @@ func (s *Service) CreatePR(ctx context.Context, tenantID, userID uint, req *Crea
 		d = today()
 	}
 	pr := &PurchaseRequest{
-		TenantID:     tenantID,
-		Code:         code,
-		RequestDate:  d,
-		RequiredDate: req.RequiredDate,
-		RequestedBy:  req.RequestedBy,
-		DepartmentID: req.DepartmentID,
-		Status:       PRStatusDraft,
-		Notes:        req.Notes,
-		CreatedBy:    &userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: req.DocumentTypeID,
+		RequestDate:    d,
+		RequiredDate:   req.RequiredDate,
+		RequestedBy:    req.RequestedBy,
+		DepartmentID:   req.DepartmentID,
+		Status:         PRStatusDraft,
+		Notes:          req.Notes,
+		CreatedBy:      &userID,
 	}
 	return pr, s.repo.CreatePR(ctx, pr)
 }
@@ -158,6 +182,7 @@ func (s *Service) UpdatePR(ctx context.Context, tenantID, id uint, req *UpdatePR
 	if pr.Status != PRStatusDraft {
 		return nil, fmt.Errorf("only DRAFT purchase requests can be edited")
 	}
+	pr.DocumentTypeID = req.DocumentTypeID
 	pr.RequiredDate = req.RequiredDate
 	pr.RequestedBy = req.RequestedBy
 	pr.DepartmentID = req.DepartmentID
@@ -323,19 +348,20 @@ func (s *Service) CreatePO(ctx context.Context, tenantID, userID uint, req *Crea
 		er = 1
 	}
 	po := &PurchaseOrder{
-		TenantID:      tenantID,
-		Code:          code,
-		SupplierID:    req.SupplierID,
-		PRID:          req.PRID,
-		OrderDate:     d,
-		ExpectedDate:  req.ExpectedDate,
-		CurrencyID:    req.CurrencyID,
-		ExchangeRate:  er,
-		PaymentTermID: req.PaymentTermID,
-		WarehouseID:   req.WarehouseID,
-		Status:        POStatusDraft,
-		Notes:         req.Notes,
-		CreatedBy:     &userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: req.DocumentTypeID,
+		SupplierID:     req.SupplierID,
+		PRID:           req.PRID,
+		OrderDate:      d,
+		ExpectedDate:   req.ExpectedDate,
+		CurrencyID:     req.CurrencyID,
+		ExchangeRate:   er,
+		PaymentTermID:  req.PaymentTermID,
+		WarehouseID:    req.WarehouseID,
+		Status:         POStatusDraft,
+		Notes:          req.Notes,
+		CreatedBy:      &userID,
 	}
 	if err := s.repo.CreatePO(ctx, po); err != nil {
 		if isDuplicate(err) {
@@ -371,6 +397,7 @@ func (s *Service) UpdatePO(ctx context.Context, tenantID, id uint, req *UpdatePO
 	if po.Status != POStatusDraft {
 		return nil, fmt.Errorf("only DRAFT purchase orders can be edited")
 	}
+	po.DocumentTypeID = req.DocumentTypeID
 	po.ExpectedDate = req.ExpectedDate
 	po.PaymentTermID = req.PaymentTermID
 	if req.ExchangeRate != nil {
@@ -554,29 +581,37 @@ func (s *Service) CreateGRN(ctx context.Context, tenantID, userID uint, req *Cre
 	if d == "" {
 		d = today()
 	}
-	grnType := req.GRNType
-	if grnType == "" {
+	// DocumentTypeID is optional on create; if the caller didn't pick one,
+	// auto-select the system Type that matches the linkage on the request.
+	docTypeID := req.DocumentTypeID
+	if docTypeID == nil {
+		var wantKey string
 		switch {
 		case req.MOID != nil:
-			grnType = GRNTypeProductionOutput
+			wantKey = GRNTypeProductionOutput
 		case req.POID != nil:
-			grnType = GRNTypeWithPO
+			wantKey = GRNTypeWithPO
 		default:
-			grnType = GRNTypeWithoutPO
+			wantKey = GRNTypeWithoutPO
+		}
+		if s.dt != nil {
+			if id, err := s.dt.FindSystemType(ctx, tenantID, "GRN", wantKey); err == nil && id != 0 {
+				docTypeID = &id
+			}
 		}
 	}
 	grn := &GoodsReceipt{
-		TenantID:    tenantID,
-		Code:        code,
-		GRNType:     grnType,
-		POID:        req.POID,
-		MOID:        req.MOID,
-		SupplierID:  req.SupplierID,
-		ReceiptDate: d,
-		WarehouseID: req.WarehouseID,
-		Status:      GRNStatusDraft,
-		Notes:       req.Notes,
-		CreatedBy:   &userID,
+		TenantID:       tenantID,
+		Code:           code,
+		DocumentTypeID: docTypeID,
+		POID:           req.POID,
+		MOID:           req.MOID,
+		SupplierID:     req.SupplierID,
+		ReceiptDate:    d,
+		WarehouseID:    req.WarehouseID,
+		Status:         GRNStatusDraft,
+		Notes:          req.Notes,
+		CreatedBy:      &userID,
 	}
 	return grn, s.repo.CreateGRN(ctx, grn)
 }
@@ -599,19 +634,23 @@ func (s *Service) ConfirmGRN(ctx context.Context, tenantID, id, userID uint) err
 	if grn.POID != nil {
 		s.appendGRNLinesToDraftInvoice(ctx, tenantID, grn)
 	}
+	// Resolve the seeded system_key for the GRN's DocumentType. Empty means
+	// the Type is user-defined and no downstream behaviour is triggered.
+	sysKey := s.resolveDocTypeKey(ctx, tenantID, grn.DocumentTypeID)
+
 	// Auto-create a QC for GRNs whose type warrants one.
 	// WITH_PO / WITHOUT_PO           → MATERIAL_QC (inbound goods)
 	// PRODUCTION_OUTPUT              → PRODUCT_QC  (own production, bottled goods)
-	// CUSTOMER_RETURN / PRODUCTION_RETURN → no QC.
+	// CUSTOMER_RETURN / PRODUCTION_RETURN / user-defined → no QC.
 	if s.qc != nil {
-		var qcType string
-		switch grn.GRNType {
+		var qcSysKey string
+		switch sysKey {
 		case GRNTypeWithPO, GRNTypeWithoutPO:
-			qcType = "MATERIAL_QC"
+			qcSysKey = "MATERIAL_QC"
 		case GRNTypeProductionOutput:
-			qcType = "PRODUCT_QC"
+			qcSysKey = "PRODUCT_QC"
 		}
-		if qcType != "" {
+		if qcSysKey != "" {
 			lines := make([]QCAutoLine, 0, len(grn.Lines))
 			for _, gl := range grn.Lines {
 				lines = append(lines, QCAutoLine{
@@ -621,15 +660,13 @@ func (s *Service) ConfirmGRN(ctx context.Context, tenantID, id, userID uint) err
 				})
 			}
 			_ = s.qc.CreateAutoQC(ctx, tenantID, userID,
-				qcType, "GRN", grn.ID, grn.WarehouseID,
-				"Auto-created from "+grn.Code+" ("+grn.GRNType+")",
+				qcSysKey, "GRN", grn.ID, grn.WarehouseID,
+				"Auto-created from "+grn.Code+" ("+sysKey+")",
 				lines)
 		}
 	}
 	// Bump the Manufacturing Order's produced_qty for PRODUCTION_OUTPUT GRNs.
-	// Best-effort — the dashboard also aggregates directly from GRNs, so this
-	// keeps the denormalised order.produced_qty in sync for legacy reads.
-	if s.mo != nil && grn.GRNType == GRNTypeProductionOutput && grn.MOID != nil {
+	if s.mo != nil && sysKey == GRNTypeProductionOutput && grn.MOID != nil {
 		for _, gl := range grn.Lines {
 			_ = s.mo.BumpProducedQty(ctx, tenantID, *grn.MOID, gl.ProductID, gl.UOMID, gl.Quantity)
 		}
@@ -856,6 +893,7 @@ func (s *Service) CreateInvoice(ctx context.Context, tenantID, userID uint, req 
 	inv := &PurchaseInvoice{
 		TenantID:            tenantID,
 		Code:                code,
+		DocumentTypeID:      req.DocumentTypeID,
 		SupplierID:          po.SupplierID,
 		POID:                req.POID,
 		InvoiceDate:         d,

@@ -10,6 +10,7 @@ import (
 	"erp-system/internal/infrastructure/events"
 	"erp-system/internal/modules"
 	"erp-system/internal/modules/masterdata/contacts"
+	"erp-system/internal/modules/masterdata/documenttypes"
 	"erp-system/internal/modules/masterdata/financial"
 	"erp-system/internal/modules/masterdata/hr"
 	"erp-system/internal/modules/masterdata/inventory"
@@ -37,7 +38,12 @@ type Module struct {
 	mrpService    *mrp.Service
 	matService    *materials.Service
 	mmCatService  *mmcategories.Service
+	docTypeService *documenttypes.Service
 }
+
+// DocumentTypeService exposes the doctypes service so main.go can wire it
+// into procurement/inventory as a DocumentTypeResolver adapter.
+func (m *Module) DocumentTypeService() *documenttypes.Service { return m.docTypeService }
 
 func New(enforcer rbac.Enforcer, auditLogger *auditinfra.Logger) *Module {
 	return &Module{
@@ -67,6 +73,7 @@ func (m *Module) Initialize(deps modules.Dependencies) error {
 		}
 	}
 	m.mmCatService = mmcategories.NewService(mmcategories.NewRepository(deps.DB), maxDepth)
+	m.docTypeService = documenttypes.NewService(documenttypes.NewRepository(deps.DB))
 	return nil
 }
 
@@ -81,6 +88,16 @@ func (m *Module) RegisterRoutes(router fiber.Router) {
 	mrp.RegisterRoutes(router.Group("/mrp"), mrp.NewHandler(m.mrpService), m.enforcer, m.auditLogger)
 	materials.RegisterRoutes(router.Group("/materials"), materials.NewHandler(m.matService), m.enforcer, m.auditLogger)
 	mmcategories.RegisterRoutes(router.Group("/material-categories"), mmcategories.NewHandler(m.mmCatService), m.enforcer, m.auditLogger)
+
+	documenttypes.RegisterRoutes(router.Group("/document-types"), documenttypes.NewHandler(m.docTypeService), m.enforcer, m.auditLogger)
+}
+
+// DocTypeHandler exposes a handler instance so main.go can also mount the
+// per-document value endpoints on a sibling URL group (/api/v1/documents/...).
+// The code lives in this module because the storage is here, but the URL is
+// intentionally not nested under /masterdata for readability.
+func (m *Module) DocTypeHandler() *documenttypes.Handler {
+	return documenttypes.NewHandler(m.docTypeService)
 }
 
 func (m *Module) RegisterEvents(_ events.EventBus) {}

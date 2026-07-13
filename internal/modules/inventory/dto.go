@@ -3,6 +3,7 @@ package inventory
 // ── Material Request DTOs ─────────────────────────────────────────────────────
 
 type CreateMRRequest struct {
+	DocumentTypeID *uint  `json:"document_type_id"`
 	MOID         *uint  `json:"mo_id"`
 	RequestedBy  uint   `json:"requested_by"  validate:"required"`
 	DepartmentID *uint  `json:"department_id"`
@@ -12,6 +13,7 @@ type CreateMRRequest struct {
 }
 
 type UpdateMRRequest struct {
+	DocumentTypeID *uint  `json:"document_type_id"`
 	DepartmentID *uint  `json:"department_id"`
 	WarehouseID  uint   `json:"warehouse_id"  validate:"required"`
 	NeededDate   string `json:"needed_date"   validate:"omitempty"`
@@ -41,6 +43,7 @@ type UpdateMRLineRequest struct {
 // ── Goods Transfer DTOs ───────────────────────────────────────────────────────
 
 type CreateTransferRequest struct {
+	DocumentTypeID  *uint  `json:"document_type_id"`
 	MOID            *uint  `json:"mo_id"`
 	FromWarehouseID uint   `json:"from_warehouse_id" validate:"required"`
 	ToWarehouseID   uint   `json:"to_warehouse_id"   validate:"required"`
@@ -49,6 +52,8 @@ type CreateTransferRequest struct {
 }
 
 type UpdateTransferRequest struct {
+	DocumentTypeID  *uint  `json:"document_type_id"`
+	MOID            *uint  `json:"mo_id"`
 	FromWarehouseID uint   `json:"from_warehouse_id" validate:"required"`
 	ToWarehouseID   uint   `json:"to_warehouse_id"   validate:"required"`
 	TransferDate    string `json:"transfer_date"     validate:"omitempty"`
@@ -78,21 +83,21 @@ type UpdateTransferLineRequest struct {
 // ── Goods Issue DTOs ──────────────────────────────────────────────────────────
 
 type CreateIssueRequest struct {
-	IssueDate     string `json:"issue_date"     validate:"omitempty"`
-	WarehouseID   uint   `json:"warehouse_id"   validate:"required"`
-	IssueReason   string `json:"issue_reason"   validate:"required"`
-	ReferenceType string `json:"reference_type"`
-	ReferenceID   *uint  `json:"reference_id"`
-	Notes         string `json:"notes"`
+	IssueDate       string `json:"issue_date"        validate:"omitempty"`
+	WarehouseID     uint   `json:"warehouse_id"      validate:"required"`
+	DocumentTypeID  *uint  `json:"document_type_id"`
+	ReferenceType   string `json:"reference_type"`
+	ReferenceID     *uint  `json:"reference_id"`
+	Notes           string `json:"notes"`
 }
 
 type UpdateIssueRequest struct {
-	IssueDate     string `json:"issue_date"     validate:"omitempty"`
-	WarehouseID   uint   `json:"warehouse_id"   validate:"required"`
-	IssueReason   string `json:"issue_reason"   validate:"required"`
-	ReferenceType string `json:"reference_type"`
-	ReferenceID   *uint  `json:"reference_id"`
-	Notes         string `json:"notes"`
+	IssueDate       string `json:"issue_date"        validate:"omitempty"`
+	WarehouseID     uint   `json:"warehouse_id"      validate:"required"`
+	DocumentTypeID  *uint  `json:"document_type_id"`
+	ReferenceType   string `json:"reference_type"`
+	ReferenceID     *uint  `json:"reference_id"`
+	Notes           string `json:"notes"`
 }
 
 type AddIssueLineRequest struct {
@@ -118,16 +123,16 @@ type UpdateIssueLineRequest struct {
 // ── Stock Adjustment DTOs ─────────────────────────────────────────────────────
 
 type CreateAdjustmentRequest struct {
-	AdjustmentDate string `json:"adjustment_date" validate:"omitempty"`
-	WarehouseID    uint   `json:"warehouse_id"    validate:"required"`
-	AdjustReason   string `json:"adjust_reason"   validate:"required"`
+	AdjustmentDate string `json:"adjustment_date"   validate:"omitempty"`
+	WarehouseID    uint   `json:"warehouse_id"      validate:"required"`
+	DocumentTypeID *uint  `json:"document_type_id"`
 	Notes          string `json:"notes"`
 }
 
 type UpdateAdjustmentRequest struct {
-	AdjustmentDate string `json:"adjustment_date" validate:"omitempty"`
-	WarehouseID    uint   `json:"warehouse_id"    validate:"required"`
-	AdjustReason   string `json:"adjust_reason"   validate:"required"`
+	AdjustmentDate string `json:"adjustment_date"   validate:"omitempty"`
+	WarehouseID    uint   `json:"warehouse_id"      validate:"required"`
+	DocumentTypeID *uint  `json:"document_type_id"`
 	Notes          string `json:"notes"`
 }
 
@@ -154,13 +159,13 @@ type UpdateAdjustmentLineRequest struct {
 // ── Quality Check DTOs ────────────────────────────────────────────────────────
 
 type CreateQualityCheckRequest struct {
-	QCType        string `json:"qc_type"        validate:"omitempty,oneof=MATERIAL_QC PRODUCT_QC"`
-	ReferenceType string `json:"reference_type"`
-	ReferenceID   *uint  `json:"reference_id"`
-	WarehouseID   uint   `json:"warehouse_id"  validate:"required"`
-	CheckDate     string `json:"check_date"    validate:"omitempty"`
-	InspectorID   *uint  `json:"inspector_id"`
-	Notes         string `json:"notes"`
+	DocumentTypeID *uint  `json:"document_type_id"`
+	ReferenceType  string `json:"reference_type"`
+	ReferenceID    *uint  `json:"reference_id"`
+	WarehouseID    uint   `json:"warehouse_id"      validate:"required"`
+	CheckDate      string `json:"check_date"        validate:"omitempty"`
+	InspectorID    *uint  `json:"inspector_id"`
+	Notes          string `json:"notes"`
 }
 
 type AddQCLineRequest struct {

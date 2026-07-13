@@ -275,9 +275,19 @@ func (r *dbRepository) ConfirmGRN(ctx context.Context, tenantID, grnID uint, con
 		if err := tx.Save(&grn).Error; err != nil {
 			return err
 		}
-		// Gate stock posting on grn_type: WITH_PO and WITHOUT_PO must pass QC first.
-		// CUSTOMER_RETURN and PRODUCTION_RETURN post immediately (no QC).
-		postStockNow := grn.GRNType != GRNTypeWithPO && grn.GRNType != GRNTypeWithoutPO
+		// Resolve the seeded system_key for the GRN's DocumentType so we can
+		// keep gating stock posting on the old enum semantics.
+		var sysKey string
+		if grn.DocumentTypeID != nil {
+			_ = tx.Raw(
+				`SELECT COALESCE(system_key, '') FROM document_types WHERE id = ?`,
+				*grn.DocumentTypeID,
+			).Row().Scan(&sysKey)
+		}
+		// Gate stock posting on the resolved key: WITH_PO and WITHOUT_PO must
+		// pass QC first; CUSTOMER_RETURN / PRODUCTION_RETURN / PRODUCTION_OUTPUT
+		// / user-defined post immediately.
+		postStockNow := sysKey != GRNTypeWithPO && sysKey != GRNTypeWithoutPO
 		for _, line := range grn.Lines {
 			ratio := line.TransferRatio
 			if ratio <= 0 {

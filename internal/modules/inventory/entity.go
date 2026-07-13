@@ -13,9 +13,10 @@ const (
 )
 
 type MaterialRequest struct {
-	ID           uint       `json:"id"            gorm:"primaryKey"`
-	TenantID     uint       `json:"tenant_id"     gorm:"not null;index"`
-	Code         string     `json:"code"          gorm:"not null;size:50"`
+	ID             uint       `json:"id"            gorm:"primaryKey"`
+	TenantID       uint       `json:"tenant_id"     gorm:"not null;index"`
+	Code           string     `json:"code"          gorm:"not null;size:50"`
+	DocumentTypeID *uint      `json:"document_type_id"`
 	MOID         *uint      `json:"mo_id"`
 	RequestedBy  uint       `json:"requested_by"  gorm:"not null"`
 	DepartmentID *uint      `json:"department_id"`
@@ -66,6 +67,7 @@ type GoodsTransfer struct {
 	ID              uint       `json:"id"               gorm:"primaryKey"`
 	TenantID        uint       `json:"tenant_id"        gorm:"not null;index"`
 	Code            string     `json:"code"             gorm:"not null;size:50"`
+	DocumentTypeID  *uint      `json:"document_type_id"`
 	MOID            *uint      `json:"mo_id"`
 	FromWarehouseID uint       `json:"from_warehouse_id" gorm:"not null"`
 	ToWarehouseID   uint       `json:"to_warehouse_id"  gorm:"not null"`
@@ -119,14 +121,14 @@ const (
 )
 
 type GoodsIssue struct {
-	ID            uint       `json:"id"             gorm:"primaryKey"`
-	TenantID      uint       `json:"tenant_id"      gorm:"not null;index"`
-	Code          string     `json:"code"           gorm:"not null;size:50"`
-	IssueDate     string     `json:"issue_date"     gorm:"type:date;not null"`
-	WarehouseID   uint       `json:"warehouse_id"   gorm:"not null"`
-	IssueReason   string     `json:"issue_reason"   gorm:"not null;size:50"`
-	ReferenceType string     `json:"reference_type" gorm:"size:50"`
-	ReferenceID   *uint      `json:"reference_id"`
+	ID              uint       `json:"id"                gorm:"primaryKey"`
+	TenantID        uint       `json:"tenant_id"         gorm:"not null;index"`
+	Code            string     `json:"code"              gorm:"not null;size:50"`
+	IssueDate       string     `json:"issue_date"        gorm:"type:date;not null"`
+	WarehouseID     uint       `json:"warehouse_id"      gorm:"not null"`
+	DocumentTypeID  *uint      `json:"document_type_id"`
+	ReferenceType   string     `json:"reference_type"    gorm:"size:50"`
+	ReferenceID     *uint      `json:"reference_id"`
 	Status        string     `json:"status"         gorm:"not null;size:20;default:DRAFT"`
 	Notes         string     `json:"notes"`
 	CreatedBy     uint       `json:"created_by"     gorm:"not null"`
@@ -173,12 +175,12 @@ const (
 )
 
 type StockAdjustment struct {
-	ID             uint       `json:"id"              gorm:"primaryKey"`
-	TenantID       uint       `json:"tenant_id"       gorm:"not null;index"`
-	Code           string     `json:"code"            gorm:"not null;size:50"`
-	AdjustmentDate string     `json:"adjustment_date" gorm:"type:date;not null"`
-	WarehouseID    uint       `json:"warehouse_id"    gorm:"not null"`
-	AdjustReason   string     `json:"adjust_reason"   gorm:"not null;size:50"`
+	ID             uint       `json:"id"                gorm:"primaryKey"`
+	TenantID       uint       `json:"tenant_id"         gorm:"not null;index"`
+	Code           string     `json:"code"              gorm:"not null;size:50"`
+	AdjustmentDate string     `json:"adjustment_date"   gorm:"type:date;not null"`
+	WarehouseID    uint       `json:"warehouse_id"      gorm:"not null"`
+	DocumentTypeID *uint      `json:"document_type_id"`
 	Status         string     `json:"status"          gorm:"not null;size:20;default:DRAFT"`
 	Notes          string     `json:"notes"`
 	CreatedBy      uint       `json:"created_by"      gorm:"not null"`
@@ -226,12 +228,12 @@ const (
 )
 
 type QualityCheck struct {
-	ID            uint      `json:"id"             gorm:"primaryKey"`
-	TenantID      uint      `json:"tenant_id"      gorm:"not null;index"`
-	Code          string    `json:"code"           gorm:"not null;size:50"`
-	QCType        string    `json:"qc_type"        gorm:"not null;size:30;default:MATERIAL_QC"`
-	ReferenceType string    `json:"reference_type" gorm:"size:50"`
-	ReferenceID   *uint     `json:"reference_id"`
+	ID              uint      `json:"id"                gorm:"primaryKey"`
+	TenantID        uint      `json:"tenant_id"         gorm:"not null;index"`
+	Code            string    `json:"code"              gorm:"not null;size:50"`
+	DocumentTypeID  *uint     `json:"document_type_id"`
+	ReferenceType   string    `json:"reference_type"    gorm:"size:50"`
+	ReferenceID     *uint     `json:"reference_id"`
 	WarehouseID   uint      `json:"warehouse_id"   gorm:"not null"`
 	CheckDate     string    `json:"check_date"     gorm:"type:date;not null"`
 	Status        string    `json:"status"         gorm:"not null;size:20;default:PENDING"`

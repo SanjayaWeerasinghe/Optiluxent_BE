@@ -21,6 +21,7 @@ type SalesQuotation struct {
 	ID                 uint           `json:"id"                    gorm:"primaryKey"`
 	TenantID           uint           `json:"tenant_id"             gorm:"not null;index"`
 	Code               string         `json:"code"                  gorm:"not null;size:50"`
+	DocumentTypeID     *uint          `json:"document_type_id"`
 	CustomerID         uint           `json:"customer_id"           gorm:"not null;index"`
 	QuotationDate      string         `json:"quotation_date"        gorm:"type:date;not null"`
 	ValidUntil         *string        `json:"valid_until"           gorm:"type:date"`
@@ -85,6 +86,7 @@ type SalesOrder struct {
 	ID                   uint           `json:"id"                      gorm:"primaryKey"`
 	TenantID             uint           `json:"tenant_id"               gorm:"not null;index"`
 	Code                 string         `json:"code"                    gorm:"not null;size:50"`
+	DocumentTypeID       *uint          `json:"document_type_id"`
 	SQID                 *uint          `json:"sq_id"`
 	CustomerID           uint           `json:"customer_id"             gorm:"not null;index"`
 	OrderDate            string         `json:"order_date"              gorm:"type:date;not null"`
@@ -146,6 +148,7 @@ type DeliveryOrder struct {
 	ID          uint           `json:"id"           gorm:"primaryKey"`
 	TenantID    uint           `json:"tenant_id"    gorm:"not null;index"`
 	Code        string         `json:"code"         gorm:"not null;size:50"`
+	DocumentTypeID *uint       `json:"document_type_id"`
 	SOID        *uint          `json:"so_id"`
 	CustomerID  uint           `json:"customer_id"  gorm:"not null;index"`
 	DeliveryDate string        `json:"delivery_date" gorm:"type:date;not null"`
@@ -197,6 +200,7 @@ type SalesInvoice struct {
 	ID              uint           `json:"id"                gorm:"primaryKey"`
 	TenantID        uint           `json:"tenant_id"         gorm:"not null;index"`
 	Code            string         `json:"code"              gorm:"not null;size:50"`
+	DocumentTypeID  *uint          `json:"document_type_id"`
 	CustomerID      uint           `json:"customer_id"       gorm:"not null;index"`
 	SOID            uint           `json:"so_id"             gorm:"not null"`
 	InvoiceDate     string         `json:"invoice_date"      gorm:"type:date;not null"`
