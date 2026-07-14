@@ -39,6 +39,7 @@ type Repository interface {
 	UpdateMR(ctx context.Context, mr *MaterialRequest) error
 	ApproveMR(ctx context.Context, tenantID, id, userID uint) error
 	RejectMR(ctx context.Context, tenantID, id, userID uint, reason string) error
+	SetMRStatus(ctx context.Context, tenantID, id uint, status string) error
 	ListMRLines(ctx context.Context, mrID uint) ([]MRLine, error)
 	AddMRLine(ctx context.Context, line *MRLine) error
 	UpdateMRLine(ctx context.Context, line *MRLine) error
@@ -68,6 +69,7 @@ type Repository interface {
 	UpdateIssueLine(ctx context.Context, line *GILine) error
 	DeleteIssueLine(ctx context.Context, tenantID, id uint) error
 	ConfirmIssue(ctx context.Context, tenantID, id, userID uint) error
+	SetIssueStatus(ctx context.Context, tenantID, id uint, status string) error
 
 	// Stock Adjustments
 	ListAdjustments(ctx context.Context, tenantID uint, status string) ([]StockAdjustment, error)
@@ -79,6 +81,7 @@ type Repository interface {
 	UpdateAdjustmentLine(ctx context.Context, line *SALine) error
 	DeleteAdjustmentLine(ctx context.Context, tenantID, id uint) error
 	ConfirmAdjustment(ctx context.Context, tenantID, id, userID uint) error
+	SetAdjustmentStatus(ctx context.Context, tenantID, id uint, status string) error
 
 	// Quality Checks
 	ListQualityChecks(ctx context.Context, tenantID uint, status string) ([]QualityCheck, error)
@@ -213,6 +216,14 @@ func (r *dbRepository) RejectMR(ctx context.Context, tenantID, id, userID uint, 
 			"rejected_at":   now,
 			"reject_reason": reason,
 		}).Error
+}
+
+// SetMRStatus is a plain status transition used by Submit / Cancel — no
+// side-effects, no user attribution beyond what the audit log records.
+func (r *dbRepository) SetMRStatus(ctx context.Context, tenantID, id uint, status string) error {
+	return r.db.WithContext(ctx).Model(&MaterialRequest{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Update("status", status).Error
 }
 
 func (r *dbRepository) ListMRLines(ctx context.Context, mrID uint) ([]MRLine, error) {
@@ -408,6 +419,13 @@ func (r *dbRepository) UpdateIssue(ctx context.Context, gi *GoodsIssue) error {
 	return r.db.WithContext(ctx).Save(gi).Error
 }
 
+// SetIssueStatus is a plain status transition used by Cancel — no side-effects.
+func (r *dbRepository) SetIssueStatus(ctx context.Context, tenantID, id uint, status string) error {
+	return r.db.WithContext(ctx).Model(&GoodsIssue{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Update("status", status).Error
+}
+
 func (r *dbRepository) ListIssueLines(ctx context.Context, issueID uint) ([]GILine, error) {
 	var rows []GILine
 	return rows, r.db.WithContext(ctx).Where("issue_id = ?", issueID).Order("line_number").Find(&rows).Error
@@ -523,6 +541,13 @@ func (r *dbRepository) CreateAdjustment(ctx context.Context, sa *StockAdjustment
 
 func (r *dbRepository) UpdateAdjustment(ctx context.Context, sa *StockAdjustment) error {
 	return r.db.WithContext(ctx).Save(sa).Error
+}
+
+// SetAdjustmentStatus is a plain status transition used by Cancel — no side-effects.
+func (r *dbRepository) SetAdjustmentStatus(ctx context.Context, tenantID, id uint, status string) error {
+	return r.db.WithContext(ctx).Model(&StockAdjustment{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Update("status", status).Error
 }
 
 func (r *dbRepository) ListAdjustmentLines(ctx context.Context, adjID uint) ([]SALine, error) {

@@ -21,8 +21,10 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	mrs.Post("", canWrite, auditMW, h.CreateMR)
 	mrs.Get("/:id", canRead, h.GetMR)
 	mrs.Put("/:id", canWrite, auditMW, h.UpdateMR)
+	mrs.Post("/:id/submit",  canWrite,   auditMW, h.SubmitMR)
 	mrs.Post("/:id/approve", canApprove, auditMW, h.ApproveMR)
-	mrs.Post("/:id/reject", canApprove, auditMW, h.RejectMR)
+	mrs.Post("/:id/reject",  canApprove, auditMW, h.RejectMR)
+	mrs.Post("/:id/cancel",  canWrite,   auditMW, h.CancelMR)
 
 	// MR Items
 	mrs.Get("/:id/items", canRead, h.ListMRLines)
@@ -52,6 +54,7 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	issues.Get("/:id", canRead, h.GetIssue)
 	issues.Put("/:id", canWrite, auditMW, h.UpdateIssue)
 	issues.Post("/:id/confirm", canApprove, auditMW, h.ConfirmIssue)
+	issues.Post("/:id/cancel", canWrite, auditMW, h.CancelIssue)
 
 	// Issue Items
 	issues.Get("/:id/items", canRead, h.ListIssueLines)
@@ -66,6 +69,7 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	adjustments.Get("/:id", canRead, h.GetAdjustment)
 	adjustments.Put("/:id", canWrite, auditMW, h.UpdateAdjustment)
 	adjustments.Post("/:id/confirm", canApprove, auditMW, h.ConfirmAdjustment)
+	adjustments.Post("/:id/cancel", canWrite, auditMW, h.CancelAdjustment)
 
 	// Adjustment Items
 	adjustments.Get("/:id/items", canRead, h.ListAdjustmentLines)

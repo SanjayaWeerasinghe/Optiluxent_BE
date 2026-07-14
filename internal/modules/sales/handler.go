@@ -514,6 +514,18 @@ func (h *Handler) ConfirmDO(c *fiber.Ctx) error {
 	return httputil.Success(c, "delivery order confirmed", do)
 }
 
+func (h *Handler) CancelDO(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.CancelDO(c.Context(), tenantFromCtx(c), id); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	do, _ := h.svc.GetDO(c.Context(), tenantFromCtx(c), id)
+	return httputil.Success(c, "delivery order cancelled", do)
+}
+
 // ── DO Lines ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListDOLines(c *fiber.Ctx) error {

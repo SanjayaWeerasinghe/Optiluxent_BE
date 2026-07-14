@@ -48,6 +48,7 @@ type Repository interface {
 	UpdateDOLine(ctx context.Context, line *DOLine) error
 	DeleteDOLine(ctx context.Context, tenantID, doID, lineID uint) error
 	ConfirmDO(ctx context.Context, tenantID, doID, userID uint, now time.Time) error
+	SetDOStatus(ctx context.Context, tenantID, id uint, status string) error
 
 	// Sales Invoices
 	NextSICode(ctx context.Context, tenantID uint) (string, error)
@@ -267,6 +268,13 @@ func (r *dbRepository) GetDO(ctx context.Context, tenantID, id uint) (*DeliveryO
 
 func (r *dbRepository) UpdateDO(ctx context.Context, do *DeliveryOrder) error {
 	return r.db.WithContext(ctx).Save(do).Error
+}
+
+// SetDOStatus is a plain status transition used by Cancel — no side-effects.
+func (r *dbRepository) SetDOStatus(ctx context.Context, tenantID, id uint, status string) error {
+	return r.db.WithContext(ctx).Model(&DeliveryOrder{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Update("status", status).Error
 }
 
 // ── DO Lines ──────────────────────────────────────────────────────────────────

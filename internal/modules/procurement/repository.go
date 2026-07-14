@@ -55,6 +55,7 @@ type Repository interface {
 	CreateGRN(ctx context.Context, grn *GoodsReceipt) error
 	UpdateGRN(ctx context.Context, grn *GoodsReceipt) error
 	ConfirmGRN(ctx context.Context, tenantID, grnID uint, confirmedBy uint) error
+	SetGRNStatus(ctx context.Context, tenantID, id uint, status string) error
 
 	// GRN Items
 	ListGRNItems(ctx context.Context, grnID uint) ([]GRNLine, error)
@@ -252,6 +253,14 @@ func (r *dbRepository) CreateGRN(ctx context.Context, grn *GoodsReceipt) error {
 
 func (r *dbRepository) UpdateGRN(ctx context.Context, grn *GoodsReceipt) error {
 	return r.db.WithContext(ctx).Save(grn).Error
+}
+
+// SetGRNStatus is a plain status transition used by Cancel — no side-effects,
+// no user attribution beyond what the audit log records.
+func (r *dbRepository) SetGRNStatus(ctx context.Context, tenantID, id uint, status string) error {
+	return r.db.WithContext(ctx).Model(&GoodsReceipt{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Update("status", status).Error
 }
 
 // ConfirmGRN confirms the GRN and updates PO received_qty atomically in PostgreSQL,

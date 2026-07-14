@@ -5,11 +5,13 @@ import "time"
 // ── Material Request ──────────────────────────────────────────────────────────
 
 const (
-	MRStatusDraft     = "DRAFT"
-	MRStatusApproved  = "APPROVED"
-	MRStatusRejected  = "REJECTED"
-	MRStatusFulfilled = "FULFILLED"
-	MRStatusPartial   = "PARTIAL"
+	MRStatusDraft            = "DRAFT"
+	MRStatusPendingApproval  = "PENDING_APPROVAL"
+	MRStatusApproved         = "APPROVED"
+	MRStatusRejected         = "REJECTED"
+	MRStatusFulfilled        = "FULFILLED"
+	MRStatusPartial          = "PARTIAL"
+	MRStatusCancelled        = "CANCELLED"
 )
 
 type MaterialRequest struct {
@@ -110,6 +112,7 @@ func (GTLine) TableName() string { return "goods_transfer_lines" }
 const (
 	GIStatusDraft     = "DRAFT"
 	GIStatusConfirmed = "CONFIRMED"
+	GIStatusCancelled = "CANCELLED"
 
 	GIReasonProduction  = "PRODUCTION"
 	GIReasonSale        = "SALE"
@@ -165,6 +168,7 @@ func (GILine) TableName() string { return "goods_issue_lines" }
 const (
 	SAStatusDraft     = "DRAFT"
 	SAStatusConfirmed = "CONFIRMED"
+	SAStatusCancelled = "CANCELLED"
 
 	SAReasonStocktake  = "STOCKTAKE"
 	SAReasonDamage     = "DAMAGE"

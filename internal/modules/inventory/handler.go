@@ -114,6 +114,30 @@ func (h *Handler) UpdateMR(c *fiber.Ctx) error {
 	return httputil.Success(c, "material request updated", mr)
 }
 
+func (h *Handler) SubmitMR(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.SubmitMR(c.Context(), tenantFromCtx(c), id, userFromCtx(c)); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	mr, _ := h.svc.GetMR(c.Context(), tenantFromCtx(c), id)
+	return httputil.Success(c, "material request submitted", mr)
+}
+
+func (h *Handler) CancelMR(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.CancelMR(c.Context(), tenantFromCtx(c), id); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	mr, _ := h.svc.GetMR(c.Context(), tenantFromCtx(c), id)
+	return httputil.Success(c, "material request cancelled", mr)
+}
+
 func (h *Handler) ApproveMR(c *fiber.Ctx) error {
 	id, err := parseID(c, "id")
 	if err != nil {
@@ -425,6 +449,18 @@ func (h *Handler) ConfirmIssue(c *fiber.Ctx) error {
 	return httputil.Success(c, "goods issue confirmed", gi)
 }
 
+func (h *Handler) CancelIssue(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.CancelIssue(c.Context(), tenantFromCtx(c), id); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	gi, _ := h.svc.GetIssue(c.Context(), tenantFromCtx(c), id)
+	return httputil.Success(c, "goods issue cancelled", gi)
+}
+
 func (h *Handler) ListIssueLines(c *fiber.Ctx) error {
 	issueID, err := parseID(c, "id")
 	if err != nil {
@@ -557,6 +593,18 @@ func (h *Handler) ConfirmAdjustment(c *fiber.Ctx) error {
 	}
 	sa, _ := h.svc.GetAdjustment(c.Context(), tenantFromCtx(c), id)
 	return httputil.Success(c, "stock adjustment confirmed", sa)
+}
+
+func (h *Handler) CancelAdjustment(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.CancelAdjustment(c.Context(), tenantFromCtx(c), id); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	sa, _ := h.svc.GetAdjustment(c.Context(), tenantFromCtx(c), id)
+	return httputil.Success(c, "stock adjustment cancelled", sa)
 }
 
 func (h *Handler) ListAdjustmentLines(c *fiber.Ctx) error {

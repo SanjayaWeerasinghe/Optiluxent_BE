@@ -106,13 +106,29 @@ func (s *Service) UpdateMR(ctx context.Context, tenantID, id uint, req *UpdateMR
 	return mr, s.repo.UpdateMR(ctx, mr)
 }
 
-func (s *Service) ApproveMR(ctx context.Context, tenantID, id, userID uint) error {
+// SubmitMR moves a DRAFT MR into PENDING_APPROVAL. Only after this can
+// approvers Approve / Reject it — mirroring the workflow the FE now shows.
+func (s *Service) SubmitMR(ctx context.Context, tenantID, id, userID uint) error {
 	mr, err := s.repo.GetMR(ctx, tenantID, id)
 	if err != nil {
 		return fmt.Errorf("material request not found")
 	}
 	if mr.Status != MRStatusDraft {
-		return fmt.Errorf("can only approve DRAFT material requests")
+		return fmt.Errorf("can only submit DRAFT material requests")
+	}
+	if len(mr.Lines) == 0 {
+		return fmt.Errorf("cannot submit an empty material request")
+	}
+	return s.repo.SetMRStatus(ctx, tenantID, id, MRStatusPendingApproval)
+}
+
+func (s *Service) ApproveMR(ctx context.Context, tenantID, id, userID uint) error {
+	mr, err := s.repo.GetMR(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("material request not found")
+	}
+	if mr.Status != MRStatusPendingApproval {
+		return fmt.Errorf("can only approve material requests awaiting approval")
 	}
 	return s.repo.ApproveMR(ctx, tenantID, id, userID)
 }
@@ -122,10 +138,22 @@ func (s *Service) RejectMR(ctx context.Context, tenantID, id, userID uint, reaso
 	if err != nil {
 		return fmt.Errorf("material request not found")
 	}
-	if mr.Status != MRStatusDraft {
-		return fmt.Errorf("can only reject DRAFT material requests")
+	if mr.Status != MRStatusPendingApproval {
+		return fmt.Errorf("can only reject material requests awaiting approval")
 	}
 	return s.repo.RejectMR(ctx, tenantID, id, userID, reason)
+}
+
+// CancelMR — voluntary abandonment. Allowed from DRAFT or PENDING_APPROVAL.
+func (s *Service) CancelMR(ctx context.Context, tenantID, id uint) error {
+	mr, err := s.repo.GetMR(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("material request not found")
+	}
+	if mr.Status != MRStatusDraft && mr.Status != MRStatusPendingApproval {
+		return fmt.Errorf("only DRAFT / PENDING_APPROVAL material requests can be cancelled")
+	}
+	return s.repo.SetMRStatus(ctx, tenantID, id, MRStatusCancelled)
 }
 
 func (s *Service) ListMRLines(ctx context.Context, tenantID, mrID uint) ([]MRLine, error) {
@@ -403,6 +431,17 @@ func (s *Service) UpdateIssue(ctx context.Context, tenantID, id uint, req *Updat
 	return gi, s.repo.UpdateIssue(ctx, gi)
 }
 
+func (s *Service) CancelIssue(ctx context.Context, tenantID, id uint) error {
+	row, err := s.repo.GetIssue(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("goods issue not found")
+	}
+	if row.Status != GIStatusDraft {
+		return fmt.Errorf("only DRAFT can be cancelled")
+	}
+	return s.repo.SetIssueStatus(ctx, tenantID, id, GIStatusCancelled)
+}
+
 func (s *Service) ConfirmIssue(ctx context.Context, tenantID, id, userID uint) error {
 	gi, err := s.repo.GetIssue(ctx, tenantID, id)
 	if err != nil {
@@ -571,6 +610,17 @@ func (s *Service) UpdateAdjustment(ctx context.Context, tenantID, id uint, req *
 		sa.Notes = req.Notes
 	}
 	return sa, s.repo.UpdateAdjustment(ctx, sa)
+}
+
+func (s *Service) CancelAdjustment(ctx context.Context, tenantID, id uint) error {
+	row, err := s.repo.GetAdjustment(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("stock adjustment not found")
+	}
+	if row.Status != SAStatusDraft {
+		return fmt.Errorf("only DRAFT can be cancelled")
+	}
+	return s.repo.SetAdjustmentStatus(ctx, tenantID, id, SAStatusCancelled)
 }
 
 func (s *Service) ConfirmAdjustment(ctx context.Context, tenantID, id, userID uint) error {

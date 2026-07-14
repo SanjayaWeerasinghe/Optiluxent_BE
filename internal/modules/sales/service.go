@@ -700,6 +700,17 @@ func (s *Service) UpdateDO(ctx context.Context, tenantID, id uint, req UpdateDOR
 	return do, s.repo.UpdateDO(ctx, do)
 }
 
+func (s *Service) CancelDO(ctx context.Context, tenantID, id uint) error {
+	row, err := s.repo.GetDO(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("delivery order not found")
+	}
+	if row.Status != DOStatusDraft {
+		return fmt.Errorf("only DRAFT can be cancelled")
+	}
+	return s.repo.SetDOStatus(ctx, tenantID, id, DOStatusCancelled)
+}
+
 func (s *Service) ConfirmDO(ctx context.Context, tenantID, userID, doID uint) error {
 	do, err := s.repo.GetDO(ctx, tenantID, doID)
 	if err != nil {

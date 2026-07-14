@@ -64,6 +64,7 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 
 	// DO workflow
 	dos.Post("/:id/confirm", canApprove, auditMW, h.ConfirmDO)
+	dos.Post("/:id/cancel", canWrite, auditMW, h.CancelDO)
 
 	// DO Lines
 	dos.Get("/:id/items", canRead, h.ListDOLines)

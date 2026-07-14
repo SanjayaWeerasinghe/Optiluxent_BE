@@ -616,6 +616,17 @@ func (s *Service) CreateGRN(ctx context.Context, tenantID, userID uint, req *Cre
 	return grn, s.repo.CreateGRN(ctx, grn)
 }
 
+func (s *Service) CancelGRN(ctx context.Context, tenantID, id uint) error {
+	row, err := s.repo.GetGRN(ctx, tenantID, id)
+	if err != nil {
+		return fmt.Errorf("goods receipt not found")
+	}
+	if row.Status != GRNStatusDraft {
+		return fmt.Errorf("only DRAFT can be cancelled")
+	}
+	return s.repo.SetGRNStatus(ctx, tenantID, id, GRNStatusCancelled)
+}
+
 func (s *Service) ConfirmGRN(ctx context.Context, tenantID, id, userID uint) error {
 	grn, err := s.repo.GetGRN(ctx, tenantID, id)
 	if err != nil {

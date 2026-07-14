@@ -63,6 +63,7 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 
 	// GRN workflow
 	grns.Post("/:id/confirm", canApprove, auditMW, h.ConfirmGRN)
+	grns.Post("/:id/cancel", canWrite, auditMW, h.CancelGRN)
 
 	// GRN Items (GRI)
 	grns.Get("/:id/items", canRead, h.ListGRNItems)

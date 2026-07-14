@@ -480,6 +480,18 @@ func (h *Handler) ConfirmGRN(c *fiber.Ctx) error {
 	return httputil.Success(c, "goods receipt confirmed", grn)
 }
 
+func (h *Handler) CancelGRN(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.CancelGRN(c.Context(), tenantFromCtx(c), id); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	grn, _ := h.svc.GetGRN(c.Context(), tenantFromCtx(c), id)
+	return httputil.Success(c, "goods receipt cancelled", grn)
+}
+
 // ── GRN Items ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) ListGRNItems(c *fiber.Ctx) error {
