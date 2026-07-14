@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_gi_mr_id;
+ALTER TABLE goods_issues DROP COLUMN IF EXISTS mr_id;

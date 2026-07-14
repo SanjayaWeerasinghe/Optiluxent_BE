@@ -401,6 +401,7 @@ func (s *Service) CreateIssue(ctx context.Context, tenantID, userID uint, req *C
 		IssueDate:      d,
 		WarehouseID:    req.WarehouseID,
 		DocumentTypeID: req.DocumentTypeID,
+		MRID:           req.MRID,
 		ReferenceType:  req.ReferenceType,
 		ReferenceID:    req.ReferenceID,
 		Status:         GIStatusDraft,
@@ -423,6 +424,7 @@ func (s *Service) UpdateIssue(ctx context.Context, tenantID, id uint, req *Updat
 	}
 	gi.WarehouseID = req.WarehouseID
 	gi.DocumentTypeID = req.DocumentTypeID
+	gi.MRID = req.MRID
 	gi.ReferenceType = req.ReferenceType
 	gi.ReferenceID = req.ReferenceID
 	if req.Notes != "" {

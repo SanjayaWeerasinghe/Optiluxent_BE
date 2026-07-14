@@ -86,6 +86,7 @@ type CreateIssueRequest struct {
 	IssueDate       string `json:"issue_date"        validate:"omitempty"`
 	WarehouseID     uint   `json:"warehouse_id"      validate:"required"`
 	DocumentTypeID  *uint  `json:"document_type_id"`
+	MRID            *uint  `json:"mr_id"`
 	ReferenceType   string `json:"reference_type"`
 	ReferenceID     *uint  `json:"reference_id"`
 	Notes           string `json:"notes"`
@@ -95,6 +96,7 @@ type UpdateIssueRequest struct {
 	IssueDate       string `json:"issue_date"        validate:"omitempty"`
 	WarehouseID     uint   `json:"warehouse_id"      validate:"required"`
 	DocumentTypeID  *uint  `json:"document_type_id"`
+	MRID            *uint  `json:"mr_id"`
 	ReferenceType   string `json:"reference_type"`
 	ReferenceID     *uint  `json:"reference_id"`
 	Notes           string `json:"notes"`

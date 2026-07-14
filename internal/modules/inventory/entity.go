@@ -130,6 +130,7 @@ type GoodsIssue struct {
 	IssueDate       string     `json:"issue_date"        gorm:"type:date;not null"`
 	WarehouseID     uint       `json:"warehouse_id"      gorm:"not null"`
 	DocumentTypeID  *uint      `json:"document_type_id"`
+	MRID            *uint      `json:"mr_id"`
 	ReferenceType   string     `json:"reference_type"    gorm:"size:50"`
 	ReferenceID     *uint      `json:"reference_id"`
 	Status        string     `json:"status"         gorm:"not null;size:20;default:DRAFT"`
