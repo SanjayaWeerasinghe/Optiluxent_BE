@@ -108,13 +108,32 @@ func methodToAction(method string) string {
 	return strings.ToUpper(method)
 }
 
+// extractResource narrows the path down to the specific doc-kind so audit
+// filtering can distinguish e.g. purchase-orders from goods-receipts within
+// the same procurement module.
+//
+// /api/v1/procurement/purchase-orders/1/confirm → "purchase-orders"
+// /api/v1/inventory/material-requests/42       → "material-requests"
+// /api/v1/masterdata/products/                 → "products"
+// /api/v1/auth/login                           → "auth" (single-segment paths fall back)
 func extractResource(path string) string {
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for _, p := range parts {
+	segments := make([]string, 0, 4)
+	for _, p := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
 		if p == "api" || p == "v1" || p == "" {
 			continue
 		}
-		return p
+		segments = append(segments, p)
+		if len(segments) >= 2 {
+			break
+		}
+	}
+	// Prefer the doc-kind (second segment) when the module has one; fall back
+	// to the first segment for flat paths like /auth/login.
+	if len(segments) >= 2 {
+		return segments[1]
+	}
+	if len(segments) == 1 {
+		return segments[0]
 	}
 	return path
 }
