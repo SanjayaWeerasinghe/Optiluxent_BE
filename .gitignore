@@ -98,3 +98,6 @@ redis_data/
 # Kubernetes secrets
 *secret*.yaml
 !*secret-template.yaml
+
+# HR CV uploads — runtime artifacts, per-tenant user data, never source-controlled
+uploads/

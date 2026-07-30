@@ -95,9 +95,10 @@ func (s *Service) CreateEmployee(ctx context.Context, tenantID uint, req *Create
 		JobPositionID:  req.JobPositionID,
 		DepartmentID:   req.DepartmentID,
 		ManagerID:      req.ManagerID,
-		EmploymentType: empType,
-		DateJoined:     req.DateJoined,
-		Email:          req.Email,
+		EmploymentType:  empType,
+		DateJoined:      req.DateJoined,
+		ContractEndDate: req.ContractEndDate,
+		Email:           req.Email,
 		Phone:          req.Phone,
 		Mobile:         req.Mobile,
 		BankID:         req.BankID,
@@ -147,6 +148,7 @@ func (s *Service) UpdateEmployee(ctx context.Context, tenantID, id uint, req *Up
 		e.EmploymentType = req.EmploymentType
 	}
 	e.DateLeft = req.DateLeft
+	e.ContractEndDate = req.ContractEndDate
 	if req.BasicSalary != nil {
 		e.BasicSalary = *req.BasicSalary
 	}
