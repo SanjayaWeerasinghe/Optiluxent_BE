@@ -7,20 +7,34 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"erp-system/pkg/logger"
 )
+
+// truncDate keeps the YYYY-MM-DD portion of a date string. Postgres date
+// columns come back through GORM as full RFC3339 datetimes (e.g.
+// "2026-07-29T00:00:00Z") which ClickHouse's Date type rejects — it wants
+// just "2026-07-29".
+func truncDate(s string) string {
+	if len(s) >= 10 {
+		return s[:10]
+	}
+	return s
+}
 
 // ledgerRow holds data for a single stock_ledger entry written to ClickHouse.
 type ledgerRow struct {
-	tenantID    uint
-	productID   uint
-	variantID   *uint
-	warehouseID uint
-	locationID  *uint
-	txType      string
-	refType     string
-	refID       uint
-	qty         float64
-	unitCost    float64
+	tenantID     uint
+	productID    uint
+	variantID    *uint
+	warehouseID  uint
+	locationID   *uint
+	productionID *uint // segregated-stock stamp for REFINING_INTAKE movements
+	txType       string
+	refType      string
+	refID        uint
+	qty          float64
+	unitCost     float64
 	totalCost   float64
 	date        string
 	createdBy   uint
@@ -92,7 +106,7 @@ type Repository interface {
 	ListQCLines(ctx context.Context, checkID uint) ([]QCLine, error)
 	AddQCLine(ctx context.Context, line *QCLine) error
 	UpdateQCLine(ctx context.Context, line *QCLine) error
-	SubmitQualityCheck(ctx context.Context, tenantID, id, userID uint) error
+	SubmitQualityCheck(ctx context.Context, tenantID, id, userID, damagedBinID uint) error
 
 	// Stock Balances
 	GetStockBalance(ctx context.Context, tenantID uint, warehouseID *uint, productID *uint) ([]StockBalanceRow, error)
@@ -136,12 +150,19 @@ func (r *dbRepository) NextCode(ctx context.Context, tenantID uint, docType stri
 // ── Stock helpers ─────────────────────────────────────────────────────────────
 
 func (r *dbRepository) upsertStockBalance(tx *gorm.DB, tenantID, productID uint, variantID *uint, warehouseID uint, locationID *uint, delta float64) error {
+	return r.upsertStockBalanceScoped(tx, tenantID, productID, variantID, warehouseID, locationID, nil, delta)
+}
+
+// upsertStockBalanceScoped is the same as upsertStockBalance but also lets the
+// caller stamp a production_id — used to keep REFINING_INTAKE stock segregated
+// per Production so it can't leak into general availability queries.
+func (r *dbRepository) upsertStockBalanceScoped(tx *gorm.DB, tenantID, productID uint, variantID *uint, warehouseID uint, locationID *uint, productionID *uint, delta float64) error {
 	return tx.Exec(`
-		INSERT INTO stock_balances (tenant_id, product_id, variant_id, warehouse_id, location_id, quantity, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, NOW())
+		INSERT INTO stock_balances (tenant_id, product_id, variant_id, warehouse_id, location_id, production_id, quantity, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
 		ON CONFLICT ON CONSTRAINT uidx_stock_balances
 		DO UPDATE SET quantity = stock_balances.quantity + EXCLUDED.quantity, updated_at = NOW()
-	`, tenantID, productID, variantID, warehouseID, locationID, delta).Error
+	`, tenantID, productID, variantID, warehouseID, locationID, productionID, delta).Error
 }
 
 func (r *dbRepository) writeToLedger(ctx context.Context, rows []ledgerRow) {
@@ -149,16 +170,21 @@ func (r *dbRepository) writeToLedger(ctx context.Context, rows []ledgerRow) {
 		return
 	}
 	for _, row := range rows {
-		_, _ = r.ledgerDB.ExecContext(ctx, `
+		if _, err := r.ledgerDB.ExecContext(ctx, `
 			INSERT INTO stock_ledger
 				(tenant_id, product_id, variant_id, warehouse_id, location_id,
 				 transaction_type, reference_type, reference_id,
-				 quantity, unit_cost, total_cost, transaction_date, created_by)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 quantity, unit_cost, total_cost, transaction_date, created_by, production_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			row.tenantID, row.productID, row.variantID, row.warehouseID, row.locationID,
 			row.txType, row.refType, row.refID,
-			row.qty, row.unitCost, row.totalCost, row.date, row.createdBy,
-		)
+			row.qty, row.unitCost, row.totalCost, truncDate(row.date), row.createdBy, row.productionID,
+		); err != nil {
+			// Non-fatal — the write is best-effort — but surface it so
+			// schema drift (e.g. a new column missing on ClickHouse)
+			// doesn't disappear the way it did before.
+			logger.Warn("stock_ledger write failed", logger.String("err", err.Error()))
+		}
 	}
 }
 
@@ -456,20 +482,40 @@ func (r *dbRepository) ConfirmIssue(ctx context.Context, tenantID, id, userID ui
 			return fmt.Errorf("goods issue is already %s", gi.Status)
 		}
 
-		// Check sufficient stock for each line
-		for _, line := range gi.Lines {
-			var available float64
-			q := tx.Raw(`
-				SELECT COALESCE(SUM(quantity), 0) FROM stock_balances
-				WHERE tenant_id = ? AND product_id = ? AND warehouse_id = ?`,
-				tenantID, line.ProductID, gi.WarehouseID)
-			if line.VariantID != nil {
-				q = tx.Raw(`
-					SELECT COALESCE(SUM(quantity), 0) FROM stock_balances
-					WHERE tenant_id = ? AND product_id = ? AND warehouse_id = ? AND variant_id = ?`,
-					tenantID, line.ProductID, gi.WarehouseID, *line.VariantID)
+		// If this GI came from an MR, look up the MR's Production Order —
+		// used below as the segregated-stock production_id filter for
+		// REFINING_INTAKE products.
+		var productionID *uint
+		if gi.MRID != nil {
+			var moID *uint
+			_ = tx.Raw(`SELECT mo_id FROM material_requests WHERE id = ?`, *gi.MRID).Row().Scan(&moID)
+			if moID != nil && *moID > 0 {
+				productionID = moID
 			}
-			if err := q.Row().Scan(&available); err != nil {
+		}
+
+		// Check sufficient stock for each line. REFINING_INTAKE products are
+		// filtered to the current Production's segregated pool; everything
+		// else queries general stock (production_id IS NULL is folded in via
+		// the NULLS NOT DISTINCT uniqueness).
+		for _, line := range gi.Lines {
+			var kind string
+			_ = tx.Raw(`SELECT kind FROM products WHERE id = ?`, line.ProductID).Row().Scan(&kind)
+			scoped := kind == "REFINING_INTAKE" && productionID != nil
+
+			var available float64
+			base := `SELECT COALESCE(SUM(quantity), 0) FROM stock_balances
+				WHERE tenant_id = ? AND product_id = ? AND warehouse_id = ?`
+			args := []any{tenantID, line.ProductID, gi.WarehouseID}
+			if line.VariantID != nil {
+				base += ` AND variant_id = ?`
+				args = append(args, *line.VariantID)
+			}
+			if scoped {
+				base += ` AND production_id = ?`
+				args = append(args, *productionID)
+			}
+			if err := tx.Raw(base, args...).Row().Scan(&available); err != nil {
 				return fmt.Errorf("failed to check stock for product %d: %w", line.ProductID, err)
 			}
 			if available < line.Quantity {
@@ -487,23 +533,35 @@ func (r *dbRepository) ConfirmIssue(ctx context.Context, tenantID, id, userID ui
 			if err := tx.Save(&gi.Lines[i]).Error; err != nil {
 				return err
 			}
-			if err := r.upsertStockBalance(tx, tenantID, gi.Lines[i].ProductID, gi.Lines[i].VariantID, gi.WarehouseID, gi.Lines[i].LocationID, -gi.Lines[i].Quantity); err != nil {
+			// Decide whether the deduction lands on the segregated
+			// production_id row or general stock, keyed off product.kind.
+			var kind string
+			_ = tx.Raw(`SELECT kind FROM products WHERE id = ?`, gi.Lines[i].ProductID).Row().Scan(&kind)
+			lineProd := (*uint)(nil)
+			if kind == "REFINING_INTAKE" && productionID != nil {
+				lineProd = productionID
+			}
+			if err := r.upsertStockBalanceScoped(tx, tenantID, gi.Lines[i].ProductID, gi.Lines[i].VariantID, gi.WarehouseID, gi.Lines[i].LocationID, lineProd, -gi.Lines[i].Quantity); err != nil {
 				return fmt.Errorf("failed to deduct stock on line %d: %w", gi.Lines[i].LineNumber, err)
 			}
+			// Stamp the ledger too — always with the resolved productionID
+			// (even for PRODUCT-kind chemicals on a refining MR, so
+			// consumption reports can filter by production).
 			ledgerRows = append(ledgerRows, ledgerRow{
-				tenantID:    tenantID,
-				productID:   gi.Lines[i].ProductID,
-				variantID:   gi.Lines[i].VariantID,
-				warehouseID: gi.WarehouseID,
-				locationID:  gi.Lines[i].LocationID,
-				txType:      "GOODS_ISSUE",
-				refType:     "GOODS_ISSUE",
-				refID:       gi.ID,
-				qty:         -gi.Lines[i].Quantity,
-				unitCost:    gi.Lines[i].UnitCost,
-				totalCost:   gi.Lines[i].TotalCost,
-				date:        gi.IssueDate,
-				createdBy:   userID,
+				tenantID:     tenantID,
+				productID:    gi.Lines[i].ProductID,
+				variantID:    gi.Lines[i].VariantID,
+				warehouseID:  gi.WarehouseID,
+				locationID:   gi.Lines[i].LocationID,
+				productionID: productionID,
+				txType:       "GOODS_ISSUE",
+				refType:      "GOODS_ISSUE",
+				refID:        gi.ID,
+				qty:          -gi.Lines[i].Quantity,
+				unitCost:     gi.Lines[i].UnitCost,
+				totalCost:    gi.Lines[i].TotalCost,
+				date:         gi.IssueDate,
+				createdBy:    userID,
 			})
 		}
 
@@ -668,7 +726,7 @@ func (r *dbRepository) UpdateQCLine(ctx context.Context, line *QCLine) error {
 	return r.db.WithContext(ctx).Save(line).Error
 }
 
-func (r *dbRepository) SubmitQualityCheck(ctx context.Context, tenantID, id, userID uint) error {
+func (r *dbRepository) SubmitQualityCheck(ctx context.Context, tenantID, id, userID, damagedBinID uint) error {
 	qc, err := r.GetQualityCheck(ctx, tenantID, id)
 	if err != nil {
 		return err
@@ -677,13 +735,25 @@ func (r *dbRepository) SubmitQualityCheck(ctx context.Context, tenantID, id, use
 		return fmt.Errorf("quality check has no lines")
 	}
 
+	// Derive the per-line result from the qty numbers the checker entered.
+	// A line where only passed is > 0 → PASSED; only failed → FAILED; both
+	// (or neither, e.g. skipped) → PARTIAL. Historic code read line.Result
+	// but that field is no longer surfaced on the FE — the qty fields are
+	// the source of truth.
 	allPassed := true
 	allFailed := true
-	for _, line := range qc.Lines {
-		if line.Result != QCStatusPassed {
+	for i := range qc.Lines {
+		p, f := qc.Lines[i].QtyPassed, qc.Lines[i].QtyFailed
+		switch {
+		case p > 0 && f == 0:
+			qc.Lines[i].Result = QCStatusPassed
+			allFailed = false
+		case p == 0 && f > 0:
+			qc.Lines[i].Result = QCStatusFailed
 			allPassed = false
-		}
-		if line.Result != QCStatusFailed {
+		default:
+			qc.Lines[i].Result = QCStatusPartial
+			allPassed = false
 			allFailed = false
 		}
 	}
@@ -709,9 +779,15 @@ func (r *dbRepository) SubmitQualityCheck(ctx context.Context, tenantID, id, use
 			Update("status", overallStatus).Error; err != nil {
 			return err
 		}
-		// Post qty_passed for each line to stock_balances + collect ledger rows.
-		// Skip lines that didn't pass any qty.
-		txType := "QC_RELEASE"
+		// Persist the derived per-line result so downstream reports /
+		// audit trails still have the string form.
+		for _, line := range qc.Lines {
+			if err := tx.Model(&QCLine{}).
+				Where("tenant_id = ? AND id = ?", tenantID, line.ID).
+				Update("result", line.Result).Error; err != nil {
+				return err
+			}
+		}
 		refType := qc.ReferenceType
 		var refID uint
 		if qc.ReferenceID != nil {
@@ -719,23 +795,41 @@ func (r *dbRepository) SubmitQualityCheck(ctx context.Context, tenantID, id, use
 		}
 		// Build a product_id → location_id map from the upstream reference for placement.
 		locByProduct := r.locationsForQCSource(tx, qc)
+		// Pre-resolve the pointer for the DAMAGED bin — a shared value
+		// across every failed-line ledger row + upsert.
+		var dmgLocPtr *uint
+		if damagedBinID > 0 {
+			dmgLocPtr = &damagedBinID
+		}
 		for _, line := range qc.Lines {
-			if line.QtyPassed <= 0 {
-				continue
+			if line.QtyPassed > 0 {
+				var locID *uint
+				if l, ok := locByProduct[line.ProductID]; ok {
+					locID = l
+				}
+				if err := r.upsertStockBalance(tx, tenantID, line.ProductID, line.VariantID, qc.WarehouseID, locID, line.QtyPassed); err != nil {
+					return fmt.Errorf("failed to post pass stock for QC line %d: %w", line.ID, err)
+				}
+				ledgerRows = append(ledgerRows, ledgerRow{
+					tenantID: tenantID, productID: line.ProductID, variantID: line.VariantID,
+					warehouseID: qc.WarehouseID, locationID: locID,
+					txType: "QC_RELEASE", refType: refType, refID: refID,
+					qty: line.QtyPassed, date: qc.CheckDate, createdBy: userID,
+				})
 			}
-			var locID *uint
-			if l, ok := locByProduct[line.ProductID]; ok {
-				locID = l
+			// Failed qty lands in the DAMAGED bin so ops can see it on
+			// the floor + decide whether to scrap / return-to-supplier.
+			if line.QtyFailed > 0 && dmgLocPtr != nil {
+				if err := r.upsertStockBalance(tx, tenantID, line.ProductID, line.VariantID, qc.WarehouseID, dmgLocPtr, line.QtyFailed); err != nil {
+					return fmt.Errorf("failed to post damaged stock for QC line %d: %w", line.ID, err)
+				}
+				ledgerRows = append(ledgerRows, ledgerRow{
+					tenantID: tenantID, productID: line.ProductID, variantID: line.VariantID,
+					warehouseID: qc.WarehouseID, locationID: dmgLocPtr,
+					txType: "QC_DAMAGED", refType: refType, refID: refID,
+					qty: line.QtyFailed, date: qc.CheckDate, createdBy: userID,
+				})
 			}
-			if err := r.upsertStockBalance(tx, tenantID, line.ProductID, line.VariantID, qc.WarehouseID, locID, line.QtyPassed); err != nil {
-				return fmt.Errorf("failed to post stock for QC line %d: %w", line.ID, err)
-			}
-			ledgerRows = append(ledgerRows, ledgerRow{
-				tenantID: tenantID, productID: line.ProductID, variantID: line.VariantID,
-				warehouseID: qc.WarehouseID, locationID: locID,
-				txType: txType, refType: refType, refID: refID,
-				qty: line.QtyPassed, date: qc.CheckDate, createdBy: userID,
-			})
 		}
 		return nil
 	})

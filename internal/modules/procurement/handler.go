@@ -621,6 +621,18 @@ func (h *Handler) CreateInvoice(c *fiber.Ctx) error {
 	return httputil.Created(c, "invoice created", inv)
 }
 
+func (h *Handler) ListInvoiceLines(c *fiber.Ctx) error {
+	invoiceID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	inv, err := h.svc.GetInvoice(c.Context(), tenantFromCtx(c), invoiceID)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "invoice lines retrieved", inv.Lines)
+}
+
 func (h *Handler) AddInvoiceLine(c *fiber.Ctx) error {
 	invoiceID, err := parseID(c, "id")
 	if err != nil {

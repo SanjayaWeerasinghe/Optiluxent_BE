@@ -12,13 +12,106 @@ import (
 	"github.com/google/uuid"
 )
 
-type Service struct {
-	repo Repository
-	bus  events.EventBus
+// FinanceChecker is the tiny interface sales needs to gate SO confirms
+// against a customer's credit type (CASH vs CREDIT) and outstanding
+// balance. Satisfied by finance.Service. If unwired the gate falls open
+// (existing behaviour preserved for tenants that haven't turned on the
+// finance module yet).
+type FinanceChecker interface {
+	PartyOutstanding(ctx context.Context, tenantID, partyID uint, kind string) (float64, error)
+	PartyCreditProfile(ctx context.Context, tenantID, partyID uint) (creditType string, creditLimit float64, err error)
 }
 
-func NewService(repo Repository) *Service           { return &Service{repo: repo} }
-func (s *Service) SetEventBus(bus events.EventBus)  { s.bus = bus }
+// FinancePostGL is the sales-side hook into finance for GL posting on
+// SI post + inserting a payments row on RecordPayment. Structural match
+// with finance.Service.
+type FinancePostGL interface {
+	PostSIToGL(ctx context.Context, tenantID, userID, siID uint) (interface{}, error)
+	RecordInvoicePaymentSI(ctx context.Context, tenantID, userID, siID uint, amount float64, method, referenceNo, notes string, bankAccountID *uint, paymentDate string) error
+}
+
+// AllocationReserver is the sales-side thin interface into inventory's
+// allocation service. Reserve on SO line create/update, ReleaseByDoc on
+// SO cancel, Consume when a DO is confirmed against the SO. Satisfied
+// structurally by an adapter wired in cmd/api/main.go. Unwired → sales
+// still functions (no stock guard) so tenants on legacy behaviour aren't
+// broken by the new module boot order.
+type AllocationReserver interface {
+	Reserve(ctx context.Context, tenantID uint, req SOAllocReserveRequest) error
+	Release(ctx context.Context, tenantID uint, sourceType string, sourceID uint) error
+	Consume(ctx context.Context, tenantID uint, sourceType string, sourceID uint) error
+	ReleaseByDoc(ctx context.Context, tenantID uint, sourceType string, docID uint) error
+}
+
+// SOAllocReserveRequest — sales' local mirror of the inventory
+// ReserveRequest shape. Kept as a separate type here so this package
+// doesn't import inventory (would cause a cycle via cmd/api/main.go).
+type SOAllocReserveRequest struct {
+	ProductID   uint
+	VariantID   *uint
+	WarehouseID uint
+	Quantity    float64
+	SourceID    uint // SO line id
+	SourceDocID uint // SO header id
+	Notes       string
+	OnUpdate    bool
+}
+
+type Service struct {
+	repo  Repository
+	bus   events.EventBus
+	fin   FinancePostGL
+	fchk  FinanceChecker
+	alloc AllocationReserver
+}
+
+func NewService(repo Repository) *Service            { return &Service{repo: repo} }
+func (s *Service) SetEventBus(bus events.EventBus)   { s.bus = bus }
+func (s *Service) SetFinancePoster(fin FinancePostGL) { s.fin = fin }
+func (s *Service) SetFinanceChecker(fc FinanceChecker) { s.fchk = fc }
+func (s *Service) SetAllocationReserver(a AllocationReserver) { s.alloc = a }
+
+// ApplyInvoicePayment is called by the finance module when it records a
+// payment against an SI. Bumps paid_amount + status. Returns customer +
+// currency so finance can stamp its payment row.
+func (s *Service) ApplyInvoicePayment(ctx context.Context, tenantID, invoiceID uint, amount float64) (partyID, currencyID uint, err error) {
+	si, err := s.repo.GetSI(ctx, tenantID, invoiceID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("sales invoice not found")
+	}
+	if si.Status == SIStatusDraft {
+		return 0, 0, fmt.Errorf("invoice must be posted before recording payment")
+	}
+	if si.Status == SIStatusCancelled {
+		return 0, 0, fmt.Errorf("cannot record payment on a cancelled invoice")
+	}
+	if amount <= 0 {
+		return 0, 0, fmt.Errorf("payment amount must be greater than zero")
+	}
+	remaining := si.TotalAmount - si.PaidAmount
+	if amount > remaining+0.005 {
+		return 0, 0, fmt.Errorf("payment amount %.2f exceeds remaining balance %.2f", amount, remaining)
+	}
+	si.PaidAmount += amount
+	if si.PaidAmount >= si.TotalAmount-0.005 {
+		si.Status = SIStatusPaid
+	} else {
+		si.Status = SIStatusPartial
+	}
+	if err := s.repo.UpdateSI(ctx, si); err != nil {
+		return 0, 0, err
+	}
+	return si.CustomerID, si.CurrencyID, nil
+}
+
+// LookupInvoiceSI implements finance.InvoiceLookup for SI headers.
+func (s *Service) LookupInvoiceSI(ctx context.Context, tenantID, invoiceID uint) (partyID, currencyID uint, totalAmount, taxAmount float64, err error) {
+	si, err := s.repo.GetSI(ctx, tenantID, invoiceID)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return si.CustomerID, si.CurrencyID, si.TotalAmount, si.TaxAmount, nil
+}
 
 func (s *Service) publish(ctx context.Context, eventType string, tenantID, userID uint, payload any) {
 	if s.bus == nil {
@@ -219,18 +312,22 @@ func (s *Service) AcceptSQ(ctx context.Context, tenantID, userID, id uint) (*Sal
 	}
 	sqID := sq.ID
 	so := &SalesOrder{
-		TenantID:      tenantID,
-		Code:          soCode,
-		SQID:          &sqID,
-		CustomerID:    sq.CustomerID,
-		OrderDate:     today(),
-		CurrencyID:    sq.CurrencyID,
-		ExchangeRate:  sq.ExchangeRate,
-		PaymentTermID: sq.PaymentTermID,
-		WarehouseID:   sq.WarehouseID,
-		Status:        SOStatusDraft,
-		Notes:         sq.Notes,
-		CreatedBy:     &userID,
+		TenantID:       tenantID,
+		Code:           soCode,
+		SQID:           &sqID,
+		// Inherit the SQ's Type so downstream flows (Refinery Service, etc.)
+		// don't lose the classification on conversion. Users can still edit
+		// the SO's Type while it's DRAFT.
+		DocumentTypeID: sq.DocumentTypeID,
+		CustomerID:     sq.CustomerID,
+		OrderDate:      today(),
+		CurrencyID:     sq.CurrencyID,
+		ExchangeRate:   sq.ExchangeRate,
+		PaymentTermID:  sq.PaymentTermID,
+		WarehouseID:    sq.WarehouseID,
+		Status:         SOStatusDraft,
+		Notes:          sq.Notes,
+		CreatedBy:      &userID,
 	}
 	if err := s.repo.CreateSO(ctx, so); err != nil {
 		return nil, nil, err
@@ -523,6 +620,28 @@ func (s *Service) ConfirmSO(ctx context.Context, tenantID, userID, soID uint) er
 	if len(so.Lines) == 0 {
 		return fmt.Errorf("sales order must have at least one item")
 	}
+	// Credit gate. If the finance module is wired, block confirmation
+	// when a CASH customer has any unpaid invoice, or when a CREDIT
+	// customer's outstanding + this new order would blow their limit.
+	// Falls open when finance isn't wired to preserve legacy behaviour.
+	if s.fchk != nil {
+		creditType, creditLimit, err := s.fchk.PartyCreditProfile(ctx, tenantID, so.CustomerID)
+		if err == nil {
+			outstanding, _ := s.fchk.PartyOutstanding(ctx, tenantID, so.CustomerID, "AR")
+			switch creditType {
+			case "CASH":
+				if outstanding > 0.005 {
+					return fmt.Errorf("cash customer has %.2f unpaid; settle before confirming a new order", outstanding)
+				}
+			case "CREDIT":
+				proposed := outstanding + so.TotalAmount
+				if creditLimit > 0 && proposed > creditLimit+0.005 {
+					return fmt.Errorf("credit limit %.2f exceeded (current outstanding %.2f + this order %.2f = %.2f)",
+						creditLimit, outstanding, so.TotalAmount, proposed)
+				}
+			}
+		}
+	}
 	now := time.Now()
 	so.Status = SOStatusConfirmed
 	so.ConfirmedBy = &userID
@@ -537,6 +656,9 @@ func (s *Service) CancelSO(ctx context.Context, tenantID, soID uint) error {
 	}
 	if so.Status == SOStatusDelivered || so.Status == SOStatusCancelled {
 		return fmt.Errorf("cannot cancel a %s sales order", so.Status)
+	}
+	if s.alloc != nil {
+		_ = s.alloc.ReleaseByDoc(ctx, tenantID, "SO_LINE", soID)
 	}
 	so.Status = SOStatusCancelled
 	return s.repo.UpdateSO(ctx, so)
@@ -581,6 +703,24 @@ func (s *Service) AddSOLine(ctx context.Context, tenantID, soID uint, req AddSOL
 	if err := s.repo.AddSOLine(ctx, line); err != nil {
 		return nil, err
 	}
+	// Reserve stock at the SO's shipping warehouse. If the reservation
+	// fails (insufficient available stock), roll back the line so the FE
+	// sees an atomic "line + allocation" pair.
+	if s.alloc != nil {
+		if err := s.alloc.Reserve(ctx, tenantID, SOAllocReserveRequest{
+			ProductID:   line.ProductID,
+			VariantID:   line.VariantID,
+			WarehouseID: so.WarehouseID,
+			Quantity:    line.Quantity,
+			SourceID:    line.ID,
+			SourceDocID: soID,
+			Notes:       fmt.Sprintf("SO %s line %d", so.Code, line.LineNumber),
+			OnUpdate:    true,
+		}); err != nil {
+			_ = s.repo.DeleteSOLine(ctx, tenantID, soID, line.ID)
+			return nil, err
+		}
+	}
 	so.Lines = append(so.Lines, *line)
 	calcSOTotals(so)
 	_ = s.repo.UpdateSO(ctx, so)
@@ -612,6 +752,22 @@ func (s *Service) UpdateSOLine(ctx context.Context, tenantID, soID, lineID uint,
 	if err := s.repo.UpdateSOLine(ctx, line); err != nil {
 		return nil, err
 	}
+	// Re-reserve on qty/product change. OnUpdate=true drops the prior
+	// allocation before checking availability so we don't double-count.
+	if s.alloc != nil {
+		if err := s.alloc.Reserve(ctx, tenantID, SOAllocReserveRequest{
+			ProductID:   line.ProductID,
+			VariantID:   line.VariantID,
+			WarehouseID: so.WarehouseID,
+			Quantity:    line.Quantity,
+			SourceID:    line.ID,
+			SourceDocID: soID,
+			Notes:       fmt.Sprintf("SO %s line %d", so.Code, line.LineNumber),
+			OnUpdate:    true,
+		}); err != nil {
+			return nil, err
+		}
+	}
 	// Recalculate SO totals
 	so, _ = s.repo.GetSO(ctx, tenantID, soID)
 	calcSOTotals(so)
@@ -626,6 +782,9 @@ func (s *Service) DeleteSOLine(ctx context.Context, tenantID, soID, lineID uint)
 	}
 	if so.Status != SOStatusDraft {
 		return fmt.Errorf("cannot delete items from a %s sales order", so.Status)
+	}
+	if s.alloc != nil {
+		_ = s.alloc.Release(ctx, tenantID, "SO_LINE", lineID)
 	}
 	if err := s.repo.DeleteSOLine(ctx, tenantID, soID, lineID); err != nil {
 		return err
@@ -724,6 +883,16 @@ func (s *Service) ConfirmDO(ctx context.Context, tenantID, userID, doID uint) er
 	}
 	if err := s.repo.ConfirmDO(ctx, tenantID, doID, userID, time.Now()); err != nil {
 		return err
+	}
+	// Consume the SO_LINE allocations that this DO fulfils. Each DO line
+	// that carries an so_line_id flips that allocation to CONSUMED — the
+	// stock already moved out at the repository-level ConfirmDO decrement.
+	if s.alloc != nil && do.SOID != nil {
+		for _, dl := range do.Lines {
+			if dl.SOLineID != nil {
+				_ = s.alloc.Consume(ctx, tenantID, "SO_LINE", *dl.SOLineID)
+			}
+		}
 	}
 	// Auto-append DO lines to the SO's draft invoice
 	if do.SOID != nil {
@@ -1025,6 +1194,11 @@ func (s *Service) PostSI(ctx context.Context, tenantID, userID, invoiceID uint) 
 		TotalAmount:  si.TotalAmount,
 		PostedBy:     userID,
 	})
+	// Best-effort GL post. A missing finance module (or unconfigured
+	// tenant defaults) doesn't block the invoice post.
+	if s.fin != nil {
+		_, _ = s.fin.PostSIToGL(ctx, tenantID, userID, si.ID)
+	}
 	return nil
 }
 
@@ -1055,11 +1229,15 @@ func (s *Service) RecordPayment(ctx context.Context, tenantID, invoiceID uint, r
 		return fmt.Errorf("cannot record payment on a cancelled invoice")
 	}
 	remaining := si.TotalAmount - si.PaidAmount
-	if req.Amount > remaining {
+	// Half-cent tolerance so accumulated float drift can't reject the last
+	// settling payment (mirrors procurement.RecordPayment).
+	if req.Amount > remaining+0.005 {
 		return fmt.Errorf("payment amount %.2f exceeds remaining balance %.2f", req.Amount, remaining)
 	}
 	si.PaidAmount += req.Amount
-	if si.PaidAmount >= si.TotalAmount {
+	// Same tolerance on the PAID transition so a sub-cent shortfall can't
+	// leave an invoice stuck at PARTIAL.
+	if si.PaidAmount >= si.TotalAmount-0.005 {
 		si.Status = SIStatusPaid
 	} else {
 		si.Status = SIStatusPartial
@@ -1077,6 +1255,13 @@ func (s *Service) RecordPayment(ctx context.Context, tenantID, invoiceID uint, r
 		Remaining:   si.TotalAmount - si.PaidAmount,
 		Status:      si.Status,
 	})
+	// Historic /pay endpoint doesn't collect method or bank_account, so
+	// default to OTHER. Callers wanting rich metadata should POST to
+	// /finance/payments instead. Best-effort — swallow errors.
+	if s.fin != nil {
+		_ = s.fin.RecordInvoicePaymentSI(ctx, tenantID, 0, si.ID, req.Amount,
+			"OTHER", "", "", nil, time.Now().Format("2006-01-02"))
+	}
 	return nil
 }
 

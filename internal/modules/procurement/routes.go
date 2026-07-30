@@ -78,6 +78,7 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	invs.Get("/:id", canRead, h.GetInvoice)
 
 	// Invoice lines
+	invs.Get("/:id/lines", canRead, h.ListInvoiceLines)
 	invs.Post("/:id/lines", canWrite, auditMW, h.AddInvoiceLine)
 	invs.Delete("/:id/lines/:lineId", canDelete, auditMW, h.DeleteInvoiceLine)
 

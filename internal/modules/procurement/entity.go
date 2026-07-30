@@ -140,7 +140,16 @@ const (
 	GRNTypeCustomerReturn    = "CUSTOMER_RETURN"
 	GRNTypeProductionReturn  = "PRODUCTION_RETURN"
 	GRNTypeProductionOutput  = "PRODUCTION_OUTPUT"
+	// GRNTypeRefiningIntake — customer brings crude oil in for a Refinery
+	// Service Production. Stock posts to a segregated pool keyed by the
+	// linked Production ID and never enters our inventory valuation.
+	GRNTypeRefiningIntake    = "REFINING_INTAKE"
 )
+
+// SOTypeRefineryService — seeded document_types.system_key for the sales-
+// side "Refinery Service" classification. Present on the SO's DocumentTypeID
+// when this is a customer refining engagement.
+const SOTypeRefineryService = "REFINERY_SERVICE"
 
 type GoodsReceipt struct {
 	ID             uint           `json:"id"                gorm:"primaryKey"`

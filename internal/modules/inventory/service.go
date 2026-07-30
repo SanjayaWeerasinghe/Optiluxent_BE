@@ -8,8 +8,10 @@ import (
 
 // Service implements all inventory business logic, wrapping the Repository.
 type Service struct {
-	repo Repository
-	dt   DocumentTypeResolver
+	repo  Repository
+	dt    DocumentTypeResolver
+	dmg   DamagedBinResolver
+	alloc *AllocationService
 }
 
 // DocumentTypeResolver is the tiny interface inventory needs from the
@@ -19,18 +21,123 @@ type DocumentTypeResolver interface {
 	FindSystemType(ctx context.Context, tenantID uint, model, systemKey string) (uint, error)
 }
 
+// DamagedBinResolver resolves (or lazily creates) the DAMAGED-type
+// storage_location for a given warehouse. Called from
+// SubmitQualityCheck when a QC has qty_failed that needs somewhere to
+// land — the flow never dead-ends because a warehouse forgot to seed
+// a damaged bin. Satisfied by masterdata/inventory.Service.
+type DamagedBinResolver interface {
+	EnsureDamagedLocation(ctx context.Context, tenantID, warehouseID uint) (uint, error)
+}
+
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
+
+// SetAllocationService — wired at Initialize so the MR/GI/GT line hooks and
+// GI-confirm / GT-send flows can reserve/consume/release stock allocations.
+func (s *Service) SetAllocationService(a *AllocationService) { s.alloc = a }
+
+// AllocationService — the module-neutral surface exposed to cross-module
+// callers (sales, procurement) via cmd/api/main.go's adapter wiring. Returns
+// nil if allocations aren't wired yet — callers should nil-check.
+func (s *Service) Allocation() *AllocationService { return s.alloc }
 
 // SetDocumentTypeResolver is wired at startup from cmd/api/main.go so the
 // service can auto-select seeded Types (e.g. MATERIAL_QC) when a caller
 // doesn't explicitly pick one, and resolve system_key on legacy behaviour.
 func (s *Service) SetDocumentTypeResolver(dt DocumentTypeResolver) { s.dt = dt }
 
+// SetDamagedBinResolver wires the storage-locations service so
+// SubmitQualityCheck can look up / create a DAMAGED bin for the
+// failed-qty stock post.
+func (s *Service) SetDamagedBinResolver(dmg DamagedBinResolver) { s.dmg = dmg }
+
+// DamagedBinFor is a small pass-through used by the repository layer
+// (which doesn't hold references to sibling modules) to reach the
+// resolver via the service.
+func (s *Service) DamagedBinFor(ctx context.Context, tenantID, warehouseID uint) (uint, error) {
+	if s.dmg == nil {
+		return 0, fmt.Errorf("damaged-bin resolver not wired")
+	}
+	return s.dmg.EnsureDamagedLocation(ctx, tenantID, warehouseID)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func today() string { return time.Now().Format("2006-01-02") }
+
+// productKind — small helper used by the allocation hooks to decide whether
+// a scope key should include production_id (refining segregation). Reads
+// through the allocation repo's DB() handle since the main inventory repo
+// interface doesn't expose one.
+func (s *Service) productKind(ctx context.Context, productID uint) string {
+	if s.alloc == nil {
+		return ""
+	}
+	var kind string
+	_ = s.alloc.repo.DB().WithContext(ctx).
+		Raw(`SELECT kind FROM products WHERE id = ?`, productID).Row().Scan(&kind)
+	return kind
+}
+
+// scopeForMR — build the allocation ScopeKey for an MR line. If the MR is
+// linked to a Manufacturing Order and the product is REFINING_INTAKE,
+// segregate against that MO's production_id.
+func (s *Service) scopeForMR(ctx context.Context, mr *MaterialRequest, line *MRLine) ScopeKey {
+	sk := ScopeKey{
+		ProductID:   line.ProductID,
+		VariantID:   line.VariantID,
+		WarehouseID: mr.WarehouseID,
+	}
+	if mr.MOID != nil && s.productKind(ctx, line.ProductID) == "REFINING_INTAKE" {
+		mo := *mr.MOID
+		sk.ProductionID = &mo
+	}
+	return sk
+}
+
+// reserveForMRLine — the common Reserve call reused by AddMRLine and
+// UpdateMRLine. Bubbles a clean error message up to the caller/API layer.
+func (s *Service) reserveForMRLine(ctx context.Context, tenantID uint, mr *MaterialRequest, line *MRLine) error {
+	_, err := s.alloc.Reserve(ctx, ReserveRequest{
+		TenantID:    tenantID,
+		ScopeKey:    s.scopeForMR(ctx, mr, line),
+		Quantity:    line.RequestedQty,
+		SourceType:  AllocSourceMRLine,
+		SourceID:    line.ID,
+		SourceDocID: mr.ID,
+		Notes:       fmt.Sprintf("MR %s line %d", mr.Code, line.LineNumber),
+		OnUpdate:    true, // idempotent: drops any pre-existing alloc for this line first
+	})
+	return err
+}
+
+// scopeForGI — the scope key for a GI line at its issue warehouse. Standalone
+// GIs use general stock; MR-linked GIs consume the MR's allocation instead
+// (so this helper is only called from the standalone branch).
+func (s *Service) scopeForGI(ctx context.Context, gi *GoodsIssue, line *GILine, productionID *uint) ScopeKey {
+	sk := ScopeKey{
+		ProductID:   line.ProductID,
+		VariantID:   line.VariantID,
+		WarehouseID: gi.WarehouseID,
+	}
+	if productionID != nil && s.productKind(ctx, line.ProductID) == "REFINING_INTAKE" {
+		sk.ProductionID = productionID
+	}
+	return sk
+}
+
+// scopeForGT — the scope key for a GT line at its source warehouse.
+func (s *Service) scopeForGT(ctx context.Context, gt *GoodsTransfer, line *GTLine) ScopeKey {
+	sk := ScopeKey{
+		ProductID:   line.ProductID,
+		VariantID:   line.VariantID,
+		WarehouseID: gt.FromWarehouseID,
+	}
+	_ = ctx
+	return sk
+}
 
 // ── Material Requests ─────────────────────────────────────────────────────────
 
@@ -141,6 +248,9 @@ func (s *Service) RejectMR(ctx context.Context, tenantID, id, userID uint, reaso
 	if mr.Status != MRStatusPendingApproval {
 		return fmt.Errorf("can only reject material requests awaiting approval")
 	}
+	if s.alloc != nil {
+		_ = s.alloc.ReleaseByDoc(ctx, tenantID, AllocSourceMRLine, id)
+	}
 	return s.repo.RejectMR(ctx, tenantID, id, userID, reason)
 }
 
@@ -152,6 +262,9 @@ func (s *Service) CancelMR(ctx context.Context, tenantID, id uint) error {
 	}
 	if mr.Status != MRStatusDraft && mr.Status != MRStatusPendingApproval {
 		return fmt.Errorf("only DRAFT / PENDING_APPROVAL material requests can be cancelled")
+	}
+	if s.alloc != nil {
+		_ = s.alloc.ReleaseByDoc(ctx, tenantID, AllocSourceMRLine, id)
 	}
 	return s.repo.SetMRStatus(ctx, tenantID, id, MRStatusCancelled)
 }
@@ -181,7 +294,23 @@ func (s *Service) AddMRLine(ctx context.Context, tenantID, mrID uint, req *AddMR
 		RequestedQty: req.RequestedQty,
 		Notes:        req.Notes,
 	}
-	return line, s.repo.AddMRLine(ctx, line)
+	if err := s.repo.AddMRLine(ctx, line); err != nil {
+		return nil, err
+	}
+	// Reserve stock immediately on draft-line create. Refining MRs (linked
+	// to a MO consuming REFINING_INTAKE products) reserve from the
+	// segregated pool via production_id; general MRs reserve from the
+	// warehouse's default pool.
+	if s.alloc != nil {
+		if err := s.reserveForMRLine(ctx, tenantID, mr, line); err != nil {
+			// Roll back the line we just wrote so the caller sees an atomic
+			// "line + reservation" pair; the FE would otherwise show a line
+			// that has no allocation and gets rejected at approve time.
+			_ = s.repo.DeleteMRLine(ctx, tenantID, line.ID)
+			return nil, err
+		}
+	}
+	return line, nil
 }
 
 func (s *Service) UpdateMRLine(ctx context.Context, tenantID, mrID, lineID uint, req *UpdateMRLineRequest) (*MRLine, error) {
@@ -207,7 +336,17 @@ func (s *Service) UpdateMRLine(ctx context.Context, tenantID, mrID, lineID uint,
 	line.UOMId = req.UOMId
 	line.RequestedQty = req.RequestedQty
 	line.Notes = req.Notes
-	return line, s.repo.UpdateMRLine(ctx, line)
+	if err := s.repo.UpdateMRLine(ctx, line); err != nil {
+		return nil, err
+	}
+	// Re-reserve on qty/product change. Reserve(OnUpdate) drops the prior
+	// alloc row first so the ACTIVE sum doesn't count us twice.
+	if s.alloc != nil {
+		if err := s.reserveForMRLine(ctx, tenantID, mr, line); err != nil {
+			return nil, err
+		}
+	}
+	return line, nil
 }
 
 func (s *Service) DeleteMRLine(ctx context.Context, tenantID, mrID, lineID uint) error {
@@ -217,6 +356,10 @@ func (s *Service) DeleteMRLine(ctx context.Context, tenantID, mrID, lineID uint)
 	}
 	if mr.Status != MRStatusDraft {
 		return fmt.Errorf("cannot delete lines from a %s material request", mr.Status)
+	}
+	// Release the reservation for this line before the row disappears.
+	if s.alloc != nil {
+		_ = s.alloc.Release(ctx, tenantID, AllocSourceMRLine, lineID)
 	}
 	return s.repo.DeleteMRLine(ctx, tenantID, lineID)
 }
@@ -293,7 +436,15 @@ func (s *Service) SendTransfer(ctx context.Context, tenantID, id, userID uint) e
 	if len(t.Lines) == 0 {
 		return fmt.Errorf("goods transfer must have at least one line")
 	}
-	return s.repo.SendTransfer(ctx, tenantID, id, userID)
+	if err := s.repo.SendTransfer(ctx, tenantID, id, userID); err != nil {
+		return err
+	}
+	if s.alloc != nil {
+		for _, l := range t.Lines {
+			_ = s.alloc.Consume(ctx, tenantID, AllocSourceGTLine, l.ID)
+		}
+	}
+	return nil
 }
 
 func (s *Service) ReceiveTransfer(ctx context.Context, tenantID, id, userID uint) error {
@@ -334,7 +485,16 @@ func (s *Service) AddTransferLine(ctx context.Context, tenantID, transferID uint
 		Quantity:       req.Quantity,
 		Notes:          req.Notes,
 	}
-	return line, s.repo.AddTransferLine(ctx, line)
+	if err := s.repo.AddTransferLine(ctx, line); err != nil {
+		return nil, err
+	}
+	if s.alloc != nil {
+		if err := s.reserveForGTLine(ctx, tenantID, t, line); err != nil {
+			_ = s.repo.DeleteTransferLine(ctx, tenantID, line.ID)
+			return nil, err
+		}
+	}
+	return line, nil
 }
 
 func (s *Service) UpdateTransferLine(ctx context.Context, tenantID, transferID, lineID uint, req *UpdateTransferLineRequest) (*GTLine, error) {
@@ -362,7 +522,15 @@ func (s *Service) UpdateTransferLine(ctx context.Context, tenantID, transferID, 
 	line.UOMId = req.UOMId
 	line.Quantity = req.Quantity
 	line.Notes = req.Notes
-	return line, s.repo.UpdateTransferLine(ctx, line)
+	if err := s.repo.UpdateTransferLine(ctx, line); err != nil {
+		return nil, err
+	}
+	if s.alloc != nil {
+		if err := s.reserveForGTLine(ctx, tenantID, t, line); err != nil {
+			return nil, err
+		}
+	}
+	return line, nil
 }
 
 func (s *Service) DeleteTransferLine(ctx context.Context, tenantID, transferID, lineID uint) error {
@@ -373,7 +541,25 @@ func (s *Service) DeleteTransferLine(ctx context.Context, tenantID, transferID, 
 	if t.Status != GTStatusDraft {
 		return fmt.Errorf("cannot delete lines from a %s goods transfer", t.Status)
 	}
+	if s.alloc != nil {
+		_ = s.alloc.Release(ctx, tenantID, AllocSourceGTLine, lineID)
+	}
 	return s.repo.DeleteTransferLine(ctx, tenantID, lineID)
+}
+
+// reserveForGTLine — the Reserve call reused by AddTransferLine / UpdateTransferLine.
+func (s *Service) reserveForGTLine(ctx context.Context, tenantID uint, gt *GoodsTransfer, line *GTLine) error {
+	_, err := s.alloc.Reserve(ctx, ReserveRequest{
+		TenantID:    tenantID,
+		ScopeKey:    s.scopeForGT(ctx, gt, line),
+		Quantity:    line.Quantity,
+		SourceType:  AllocSourceGTLine,
+		SourceID:    line.ID,
+		SourceDocID: gt.ID,
+		Notes:       fmt.Sprintf("GT %s line %d", gt.Code, line.LineNumber),
+		OnUpdate:    true,
+	})
+	return err
 }
 
 // ── Goods Issues ──────────────────────────────────────────────────────────────
@@ -441,6 +627,9 @@ func (s *Service) CancelIssue(ctx context.Context, tenantID, id uint) error {
 	if row.Status != GIStatusDraft {
 		return fmt.Errorf("only DRAFT can be cancelled")
 	}
+	if s.alloc != nil {
+		_ = s.alloc.ReleaseByDoc(ctx, tenantID, AllocSourceGILine, id)
+	}
 	return s.repo.SetIssueStatus(ctx, tenantID, id, GIStatusCancelled)
 }
 
@@ -455,8 +644,35 @@ func (s *Service) ConfirmIssue(ctx context.Context, tenantID, id, userID uint) e
 	if len(gi.Lines) == 0 {
 		return fmt.Errorf("goods issue must have at least one line")
 	}
+	// Cap check: for MR-linked and production-order-linked GIs, ensure this
+	// confirm won't push any MR line's cumulative issued_qty past its
+	// requested_qty. Fires before the actual confirm so the transaction
+	// aborts cleanly on breach.
+	if err := s.validateGIAgainstMRCap(ctx, tenantID, gi); err != nil {
+		return err
+	}
 	if err := s.repo.ConfirmIssue(ctx, tenantID, id, userID); err != nil {
 		return err
+	}
+	// Consume the allocations for this GI. If MR-linked, each MR line's
+	// allocation flips CONSUMED; if standalone, each GI line's own
+	// allocation flips CONSUMED.
+	if s.alloc != nil {
+		if gi.MRID != nil {
+			// Match GI product back to MR line to consume the right alloc.
+			mrLines, _ := s.repo.ListMRLines(ctx, *gi.MRID)
+			for _, ml := range mrLines {
+				for _, l := range gi.Lines {
+					if l.ProductID == ml.ProductID {
+						_ = s.alloc.Consume(ctx, tenantID, AllocSourceMRLine, ml.ID)
+					}
+				}
+			}
+		} else {
+			for _, l := range gi.Lines {
+				_ = s.alloc.Consume(ctx, tenantID, AllocSourceGILine, l.ID)
+			}
+		}
 	}
 	// If this GI is a production issue (reference_type=PRODUCTION_ORDER),
 	// walk all MRs linked to the same MO and bump each MR line's
@@ -464,6 +680,57 @@ func (s *Service) ConfirmIssue(ctx context.Context, tenantID, id, userID uint) e
 	// Best-effort — a failure here doesn't unwind the GI confirmation.
 	if gi.ReferenceType == "PRODUCTION_ORDER" && gi.ReferenceID != nil {
 		s.bumpMRIssuedQtyForMO(ctx, tenantID, *gi.ReferenceID, gi.Lines)
+	}
+	return nil
+}
+
+// validateGIAgainstMRCap — pre-flight check that a GI confirm won't push any
+// linked MR line's cumulative issued_qty past its requested_qty. Handles
+// both single-MR GIs (gi.mr_id set) and production-order GIs (may touch
+// multiple MRs by product across the same MO).
+func (s *Service) validateGIAgainstMRCap(ctx context.Context, tenantID uint, gi *GoodsIssue) error {
+	// Collect per-product delta from this GI.
+	perProduct := make(map[uint]float64, len(gi.Lines))
+	for _, l := range gi.Lines {
+		perProduct[l.ProductID] += l.Quantity
+	}
+
+	// The set of MRs this GI's confirm will touch.
+	var mrsToCheck []MaterialRequest
+	if gi.MRID != nil {
+		mr, err := s.repo.GetMR(ctx, tenantID, *gi.MRID)
+		if err == nil {
+			mrsToCheck = []MaterialRequest{*mr}
+		}
+	}
+	if gi.ReferenceType == "PRODUCTION_ORDER" && gi.ReferenceID != nil {
+		moMRs, _ := s.repo.ListMRsByMO(ctx, tenantID, *gi.ReferenceID)
+		mrsToCheck = append(mrsToCheck, moMRs...)
+	}
+	if len(mrsToCheck) == 0 {
+		return nil // standalone GI — no MR to cap against
+	}
+
+	// The production-order path can span MULTIPLE MRs; a single product's
+	// remaining capacity is the sum of remaining across those MRs. Aggregate
+	// remaining per product before comparing.
+	perProductRemaining := make(map[uint]float64, len(perProduct))
+	for _, mr := range mrsToCheck {
+		for _, ln := range mr.Lines {
+			perProductRemaining[ln.ProductID] += ln.RequestedQty - ln.IssuedQty
+		}
+	}
+	for productID, delta := range perProduct {
+		remaining, ok := perProductRemaining[productID]
+		if !ok {
+			continue // GI line for a product the MR didn't request — allow (matches legacy behavior)
+		}
+		if delta > remaining+0.005 {
+			return fmt.Errorf(
+				"GI line for product %d exceeds MR requested remaining: %.4f > %.4f",
+				productID, delta, remaining,
+			)
+		}
 	}
 	return nil
 }
@@ -520,7 +787,19 @@ func (s *Service) AddIssueLine(ctx context.Context, tenantID, issueID uint, req 
 		TotalCost:  req.Quantity * req.UnitCost,
 		Notes:      req.Notes,
 	}
-	return line, s.repo.AddIssueLine(ctx, line)
+	if err := s.repo.AddIssueLine(ctx, line); err != nil {
+		return nil, err
+	}
+	// Standalone GIs need their own allocation. GIs linked to an MR already
+	// have stock reserved by the MR, so we skip — the confirm flow will
+	// Consume the MR_LINE alloc instead.
+	if s.alloc != nil && gi.MRID == nil {
+		if err := s.reserveForGILine(ctx, tenantID, gi, line); err != nil {
+			_ = s.repo.DeleteIssueLine(ctx, tenantID, line.ID)
+			return nil, err
+		}
+	}
+	return line, nil
 }
 
 func (s *Service) UpdateIssueLine(ctx context.Context, tenantID, issueID, lineID uint, req *UpdateIssueLineRequest) (*GILine, error) {
@@ -549,7 +828,15 @@ func (s *Service) UpdateIssueLine(ctx context.Context, tenantID, issueID, lineID
 	line.UnitCost = req.UnitCost
 	line.TotalCost = req.Quantity * req.UnitCost
 	line.Notes = req.Notes
-	return line, s.repo.UpdateIssueLine(ctx, line)
+	if err := s.repo.UpdateIssueLine(ctx, line); err != nil {
+		return nil, err
+	}
+	if s.alloc != nil && gi.MRID == nil {
+		if err := s.reserveForGILine(ctx, tenantID, gi, line); err != nil {
+			return nil, err
+		}
+	}
+	return line, nil
 }
 
 func (s *Service) DeleteIssueLine(ctx context.Context, tenantID, issueID, lineID uint) error {
@@ -560,7 +847,30 @@ func (s *Service) DeleteIssueLine(ctx context.Context, tenantID, issueID, lineID
 	if gi.Status != GIStatusDraft {
 		return fmt.Errorf("cannot delete lines from a %s goods issue", gi.Status)
 	}
+	if s.alloc != nil {
+		_ = s.alloc.Release(ctx, tenantID, AllocSourceGILine, lineID)
+	}
 	return s.repo.DeleteIssueLine(ctx, tenantID, lineID)
+}
+
+// reserveForGILine — Reserve for standalone GI lines. MR-linked GIs use the
+// MR's allocation instead so we don't double-count.
+func (s *Service) reserveForGILine(ctx context.Context, tenantID uint, gi *GoodsIssue, line *GILine) error {
+	var productionID *uint
+	if gi.ReferenceType == "PRODUCTION_ORDER" && gi.ReferenceID != nil {
+		productionID = gi.ReferenceID
+	}
+	_, err := s.alloc.Reserve(ctx, ReserveRequest{
+		TenantID:    tenantID,
+		ScopeKey:    s.scopeForGI(ctx, gi, line, productionID),
+		Quantity:    line.Quantity,
+		SourceType:  AllocSourceGILine,
+		SourceID:    line.ID,
+		SourceDocID: gi.ID,
+		Notes:       fmt.Sprintf("GI %s line %d", gi.Code, line.LineNumber),
+		OnUpdate:    true,
+	})
+	return err
 }
 
 // ── Stock Adjustments ─────────────────────────────────────────────────────────
@@ -773,7 +1083,20 @@ func (s *Service) SubmitQualityCheck(ctx context.Context, tenantID, id, userID u
 	if qc.Status == QCStatusPassed || qc.Status == QCStatusFailed || qc.Status == QCStatusPartial {
 		return fmt.Errorf("quality check is already finalized with status %s", qc.Status)
 	}
-	return s.repo.SubmitQualityCheck(ctx, tenantID, id, userID)
+	// Resolve the DAMAGED bin only if at least one line has failed qty —
+	// keeps the "all passed" fast-path free of masterdata lookups.
+	var damagedBinID uint
+	for _, l := range qc.Lines {
+		if l.QtyFailed > 0 {
+			bin, err := s.DamagedBinFor(ctx, tenantID, qc.WarehouseID)
+			if err != nil {
+				return fmt.Errorf("could not resolve DAMAGED bin for warehouse %d: %w", qc.WarehouseID, err)
+			}
+			damagedBinID = bin
+			break
+		}
+	}
+	return s.repo.SubmitQualityCheck(ctx, tenantID, id, userID, damagedBinID)
 }
 
 func (s *Service) ListQCLines(ctx context.Context, tenantID, checkID uint) ([]QCLine, error) {

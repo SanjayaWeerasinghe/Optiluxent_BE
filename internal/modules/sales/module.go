@@ -24,6 +24,10 @@ func New(enforcer rbac.Enforcer, auditLogger *auditinfra.Logger) *Module {
 func (m *Module) Name() string           { return "sales" }
 func (m *Module) Dependencies() []string { return []string{"masterdata"} }
 
+// Service exposes the underlying sales service so main.go can wire it into
+// cross-module adapters (finance module's applier + poster, credit checker).
+func (m *Module) Service() *Service { return m.svc }
+
 func (m *Module) Initialize(deps modules.Dependencies) error {
 	m.svc = NewService(NewRepository(deps.DB, deps.LedgerDB))
 	return nil

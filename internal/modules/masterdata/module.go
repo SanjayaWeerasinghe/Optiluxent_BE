@@ -45,6 +45,16 @@ type Module struct {
 // into procurement/inventory as a DocumentTypeResolver adapter.
 func (m *Module) DocumentTypeService() *documenttypes.Service { return m.docTypeService }
 
+// ProductService exposes the products service so main.go can wire it into
+// procurement/inventory as a ProductKindProvider (used to reject SERVICE
+// products from stock-hitting flows).
+func (m *Module) ProductService() *products.Service { return m.prodService }
+
+// InventoryMasterdataService exposes the storage-locations service so
+// main.go can wire it into the inventory module as a DamagedBinResolver
+// (used by SubmitQualityCheck to route qty_failed to the DAMAGED bin).
+func (m *Module) InventoryMasterdataService() *inventory.Service { return m.invService }
+
 func New(enforcer rbac.Enforcer, auditLogger *auditinfra.Logger) *Module {
 	return &Module{
 		enforcer:    enforcer,
@@ -60,7 +70,7 @@ func (m *Module) Initialize(deps modules.Dependencies) error {
 	m.finService = financial.NewService(financial.NewRepository(deps.DB))
 	m.conService = contacts.NewService(contacts.NewRepository(deps.DB))
 	m.prodService = products.NewService(products.NewRepository(deps.DB))
-	m.invService = inventory.NewService(inventory.NewRepository(deps.DB))
+	m.invService = inventory.NewService(inventory.NewRepository(deps.DB, deps.LedgerDB))
 	m.mfgService = manufacturing.NewService(manufacturing.NewRepository(deps.DB))
 	m.hrService = hr.NewService(hr.NewRepository(deps.DB))
 	m.mrpService = mrp.NewService(mrp.NewRepository(deps.DB))

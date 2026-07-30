@@ -7,6 +7,8 @@ import (
 	auditinfra "erp-system/internal/infrastructure/audit"
 	rediscache "erp-system/internal/infrastructure/cache/redis"
 	"erp-system/internal/infrastructure/http/middleware"
+	finance "erp-system/internal/modules/finance"
+	hr "erp-system/internal/modules/hr"
 	inventory "erp-system/internal/modules/inventory"
 	manufacturing "erp-system/internal/modules/manufacturing"
 	masterdata "erp-system/internal/modules/masterdata"
@@ -48,11 +50,23 @@ func (s *Server) SetupRoutes(
 	inventoryModule *inventory.Module,
 	salesModule *sales.Module,
 	manufacturingModule *manufacturing.Module,
+	financeModule *finance.Module,
+	hrModule *hr.Module,
 	redisClient *redis.Client,
 	isProd bool,
 ) {
 	// Security headers on every response
 	s.app.Use(middleware.SecurityHeaders(isProd))
+
+	// Serve uploaded files (employee CVs, etc.) from /uploads. The physical
+	// folder is mounted as a Docker volume so restarts don't wipe uploads.
+	// Kept unauthenticated for now — filenames are predictable per-employee
+	// (emp-<id>/cv.<ext>) so tighten with a signed-URL scheme if the file
+	// set ever contains sensitive PII beyond CVs.
+	s.app.Static("/uploads", "/app/uploads", fiber.Static{
+		Browse:        false,
+		CacheDuration: 10 * time.Minute,
+	})
 
 	s.app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -65,7 +79,7 @@ func (s *Server) SetupRoutes(
 	v1 := s.app.Group("/api/v1")
 	s.setupV1Routes(v1, jwtManager, blacklist, authHandler, enforcer, auditLogger,
 		userHandler, roleHandler, tenantHandler, auditHandler, ffHandler,
-		masterdataModule, procurementModule, inventoryModule, salesModule, manufacturingModule, redisClient)
+		masterdataModule, procurementModule, inventoryModule, salesModule, manufacturingModule, financeModule, hrModule, redisClient)
 }
 
 func (s *Server) setupV1Routes(
@@ -85,6 +99,8 @@ func (s *Server) setupV1Routes(
 	inventoryModule *inventory.Module,
 	salesModule *sales.Module,
 	manufacturingModule *manufacturing.Module,
+	financeModule *finance.Module,
+	hrModule *hr.Module,
 	redisClient *redis.Client,
 ) {
 	rateLimiter := middleware.NewRateLimiter(redisClient)
@@ -172,6 +188,19 @@ func (s *Server) setupV1Routes(
 
 	// ── Manufacturing module ───────────────────────────────────────────────────
 	manufacturingModule.RegisterRoutes(protected.Group("/manufacturing"))
+
+	// ── Finance module ─────────────────────────────────────────────────────────
+	if financeModule != nil {
+		financeModule.RegisterRoutes(protected.Group("/finance"))
+	}
+
+	// ── HR module ──────────────────────────────────────────────────────────────
+	// Extensions on top of masterdata/hr employees: family, emergency
+	// contacts, attendance, salary history and CV upload. Mounted at
+	// /api/v1/hr — routes are nested per-employee (/employees/:id/...).
+	if hrModule != nil {
+		hrModule.RegisterRoutes(protected.Group("/hr"))
+	}
 }
 
 // RegisterModuleRoutes registers routes for a dynamically loaded module.

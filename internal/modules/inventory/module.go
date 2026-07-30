@@ -32,6 +32,7 @@ func (m *Module) Service() *Service { return m.svc }
 
 func (m *Module) Initialize(deps modules.Dependencies) error {
 	m.svc = NewService(NewRepository(deps.DB, deps.LedgerDB))
+	m.svc.SetAllocationService(NewAllocationService(NewAllocationRepository(deps.DB)))
 	return nil
 }
 

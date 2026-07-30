@@ -29,6 +29,8 @@ import (
 	tenanthandler "erp-system/internal/interfaces/http/handlers/tenant"
 	userhandler "erp-system/internal/interfaces/http/handlers/user"
 	"erp-system/internal/modules"
+	finance "erp-system/internal/modules/finance"
+	hr "erp-system/internal/modules/hr"
 	inventory "erp-system/internal/modules/inventory"
 	manufacturing "erp-system/internal/modules/manufacturing"
 	masterdata "erp-system/internal/modules/masterdata"
@@ -187,6 +189,12 @@ func main() {
 	mfgModule := manufacturing.New(enforcer, auditLogger)
 	registry.Register(mfgModule)
 
+	finModule := finance.New(enforcer, auditLogger)
+	registry.Register(finModule)
+
+	hrModule := hr.New(enforcer, auditLogger)
+	registry.Register(hrModule)
+
 	if err := registry.Initialize(modules.Dependencies{DB: db, LedgerDB: ledgerDB, EventBus: eventBus}); err != nil {
 		logger.Fatal("Failed to initialise modules", logger.Err(err))
 	}
@@ -213,6 +221,44 @@ func main() {
 		procModule.Service().SetDocumentTypeResolver(dtSvc)
 		invModule.Service().SetDocumentTypeResolver(dtSvc)
 		logger.Info("Document-type resolver wired into procurement + inventory")
+	}
+	// Product-Kind provider — lets stock-hitting flows (GRN item add,
+	// MR/GI/GT/SA line add, DO line add) reject SERVICE products.
+	if prodSvc := mdModule.ProductService(); prodSvc != nil {
+		procModule.Service().SetProductKindProvider(prodSvc)
+		logger.Info("Product-kind provider wired into procurement")
+	}
+	// Damaged-bin resolver — the masterdata/inventory (storage-locations)
+	// service satisfies inventory.DamagedBinResolver structurally. Used by
+	// SubmitQualityCheck to route qty_failed onto the receiving
+	// warehouse's DAMAGED bin (auto-creating one if missing).
+	if mdInvSvc := mdModule.InventoryMasterdataService(); mdInvSvc != nil {
+		invModule.Service().SetDamagedBinResolver(mdInvSvc)
+		logger.Info("Damaged-bin resolver wired into inventory")
+	}
+	// Finance module wiring — bi-directional:
+	//   • finance.RecordPayment needs to call sales.ApplyInvoicePayment /
+	//     procurement.ApplyInvoicePayment to bump paid_amount + status.
+	//   • sales/procurement PostInvoice + RecordPayment need to trigger
+	//     finance.PostSIToGL / PostPIToGL + insert a payments row.
+	// Each side is satisfied by thin structural adapters — no reflection.
+	if finSvc := finModule.Service(); finSvc != nil {
+		finSvc.SetSalesApplier(salesApplierAdapter{sales: salesModule.Service()})
+		finSvc.SetProcurementApplier(procApplierAdapter{proc: procModule.Service()})
+		finSvc.SetSalesInvoiceLookup(salesInvoiceLookupAdapter{sales: salesModule.Service()})
+		finSvc.SetProcurementInvoiceLookup(procInvoiceLookupAdapter{proc: procModule.Service()})
+		procModule.Service().SetFinancePoster(financePosterProc{fin: finSvc})
+		salesModule.Service().SetFinancePoster(financePosterSales{fin: finSvc})
+		salesModule.Service().SetFinanceChecker(finSvc)
+		logger.Info("Finance module wired into procurement + sales")
+	}
+	// Stock Allocation wiring — SO line CRUD needs to reserve/consume via
+	// inventory's allocation service. The adapter translates sales' local
+	// SOAllocReserveRequest to inventory's ReserveRequest so the two modules
+	// stay import-cycle-free.
+	if invAlloc := invModule.Service().Allocation(); invAlloc != nil {
+		salesModule.Service().SetAllocationReserver(salesAllocAdapter{alloc: invAlloc})
+		logger.Info("Stock allocation service wired into sales")
 	}
 	// MO dashboard readers — one function per source list. Each adapter maps
 	// the source module's rich types down to the lightweight dashboard row
@@ -350,7 +396,7 @@ func main() {
 		jwtManager, blacklist, authHandler,
 		enforcer, auditLogger,
 		uHandler, rHandler, tHandler, aHandler, fHandler,
-		mdModule, procModule, invModule, salesModule, mfgModule,
+		mdModule, procModule, invModule, salesModule, mfgModule, finModule, hrModule,
 		redisClient, isProd,
 	)
 
@@ -402,4 +448,92 @@ func (a mfgQCAdapter) CreateAutoQC(
 	}
 	_, err := a.inv.CreateAutoQC(ctx, tenantID, userID, qcType, refType, refID, warehouseID, notes, out)
 	return err
+}
+
+// ── Finance ↔ sales/procurement adapters ────────────────────────────────────
+//
+// Each side defines its own tiny interface; the adapters translate between
+// module-neutral finance signatures and the concrete service methods.
+
+type salesApplierAdapter struct{ sales *sales.Service }
+
+func (a salesApplierAdapter) ApplyPayment(ctx context.Context, tenantID, invoiceID uint, amount float64) (uint, uint, error) {
+	return a.sales.ApplyInvoicePayment(ctx, tenantID, invoiceID, amount)
+}
+
+type procApplierAdapter struct{ proc *procurement.Service }
+
+func (a procApplierAdapter) ApplyPayment(ctx context.Context, tenantID, invoiceID uint, amount float64) (uint, uint, error) {
+	return a.proc.ApplyInvoicePayment(ctx, tenantID, invoiceID, amount)
+}
+
+type salesInvoiceLookupAdapter struct{ sales *sales.Service }
+
+func (a salesInvoiceLookupAdapter) LookupInvoice(ctx context.Context, tenantID, invoiceID uint) (uint, uint, float64, float64, error) {
+	return a.sales.LookupInvoiceSI(ctx, tenantID, invoiceID)
+}
+
+type procInvoiceLookupAdapter struct{ proc *procurement.Service }
+
+func (a procInvoiceLookupAdapter) LookupInvoice(ctx context.Context, tenantID, invoiceID uint) (uint, uint, float64, float64, error) {
+	return a.proc.LookupInvoicePI(ctx, tenantID, invoiceID)
+}
+
+// financePosterProc bridges finance.Service to procurement.FinancePostGL —
+// the return type on PostPIToGL is any so we don't leak finance types.
+type financePosterProc struct{ fin *finance.Service }
+
+func (f financePosterProc) PostPIToGL(ctx context.Context, tenantID, userID, piID uint) (interface{}, error) {
+	return f.fin.PostPIToGL(ctx, tenantID, userID, piID)
+}
+
+func (f financePosterProc) RecordInvoicePaymentPI(ctx context.Context, tenantID, userID, piID uint, amount float64, method, referenceNo, notes string, bankAccountID *uint, paymentDate string) error {
+	return f.fin.RecordInvoicePaymentPI(ctx, tenantID, userID, piID, amount, method, referenceNo, notes, bankAccountID, paymentDate)
+}
+
+type financePosterSales struct{ fin *finance.Service }
+
+func (f financePosterSales) PostSIToGL(ctx context.Context, tenantID, userID, siID uint) (interface{}, error) {
+	return f.fin.PostSIToGL(ctx, tenantID, userID, siID)
+}
+
+func (f financePosterSales) RecordInvoicePaymentSI(ctx context.Context, tenantID, userID, siID uint, amount float64, method, referenceNo, notes string, bankAccountID *uint, paymentDate string) error {
+	return f.fin.RecordInvoicePaymentSI(ctx, tenantID, userID, siID, amount, method, referenceNo, notes, bankAccountID, paymentDate)
+}
+
+// salesAllocAdapter — bridges sales.AllocationReserver to inventory's
+// AllocationService. The two interfaces are deliberately declared
+// separately (sales can't import inventory without a cycle) so this
+// adapter translates the local sales.SOAllocReserveRequest into
+// inventory.ReserveRequest at the call site.
+type salesAllocAdapter struct{ alloc *inventory.AllocationService }
+
+func (a salesAllocAdapter) Reserve(ctx context.Context, tenantID uint, req sales.SOAllocReserveRequest) error {
+	_, err := a.alloc.Reserve(ctx, inventory.ReserveRequest{
+		TenantID: tenantID,
+		ScopeKey: inventory.ScopeKey{
+			ProductID:   req.ProductID,
+			VariantID:   req.VariantID,
+			WarehouseID: req.WarehouseID,
+		},
+		Quantity:    req.Quantity,
+		SourceType:  inventory.AllocSourceSOLine,
+		SourceID:    req.SourceID,
+		SourceDocID: req.SourceDocID,
+		Notes:       req.Notes,
+		OnUpdate:    req.OnUpdate,
+	})
+	return err
+}
+
+func (a salesAllocAdapter) Release(ctx context.Context, tenantID uint, sourceType string, sourceID uint) error {
+	return a.alloc.Release(ctx, tenantID, sourceType, sourceID)
+}
+
+func (a salesAllocAdapter) Consume(ctx context.Context, tenantID uint, sourceType string, sourceID uint) error {
+	return a.alloc.Consume(ctx, tenantID, sourceType, sourceID)
+}
+
+func (a salesAllocAdapter) ReleaseByDoc(ctx context.Context, tenantID uint, sourceType string, docID uint) error {
+	return a.alloc.ReleaseByDoc(ctx, tenantID, sourceType, docID)
 }

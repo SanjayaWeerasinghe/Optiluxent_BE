@@ -248,7 +248,9 @@ func (r *dbRepository) CreateDO(ctx context.Context, do *DeliveryOrder) error {
 }
 
 func (r *dbRepository) ListDOs(ctx context.Context, tenantID uint, soID *uint, status string) ([]DeliveryOrder, error) {
-	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	// Preload lines — the SI extras panel rolls up delivered qty per product
+	// across every DO linked to an SO. Same pattern as procurement.ListGRNs.
+	q := r.db.WithContext(ctx).Preload("Lines").Where("tenant_id = ?", tenantID)
 	if soID != nil {
 		q = q.Where("so_id = ?", *soID)
 	}

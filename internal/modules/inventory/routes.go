@@ -92,4 +92,9 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 
 	// ── Stock Balances ──────────────────────────────────────────────────────────
 	router.Get("/stock", canRead, h.GetStockBalance)
+
+	// ── Stock Allocations ───────────────────────────────────────────────────────
+	// Read-only listing for the FE Allocations section. Reserve/Release
+	// happen implicitly via the line-CRUD flows on MR/GI/GT/SO.
+	router.Get("/allocations", canRead, h.ListAllocations)
 }

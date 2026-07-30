@@ -8,10 +8,16 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"erp-system/pkg/logger"
 )
 
 type stockLedgerRow struct {
 	productID, variantID, warehouseID, locationID uint64
+	// productionID scopes the row to a specific Production (Refinery Service
+	// intake or a Refinery Service Production Output). 0 means unscoped
+	// (general stock).
+	productionID uint64
 	qty, unitCost, total                          float64
 	date                                          string
 }
@@ -222,7 +228,10 @@ func (r *dbRepository) DeletePOItem(ctx context.Context, tenantID, id uint) erro
 // ── Goods Receipts ────────────────────────────────────────────────────────────
 
 func (r *dbRepository) ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint) ([]GoodsReceipt, error) {
-	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	// Preload lines — used by the PI extra panel to roll up received qty per
+	// product across every GRN linked to a PO. Fine at tenant scale; the
+	// query is already gated by tenant_id and (optionally) po_id.
+	q := r.db.WithContext(ctx).Preload("Lines").Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -295,8 +304,15 @@ func (r *dbRepository) ConfirmGRN(ctx context.Context, tenantID, grnID uint, con
 		}
 		// Gate stock posting on the resolved key: WITH_PO and WITHOUT_PO must
 		// pass QC first; CUSTOMER_RETURN / PRODUCTION_RETURN / PRODUCTION_OUTPUT
-		// / user-defined post immediately.
+		// / REFINING_INTAKE / user-defined post immediately.
 		postStockNow := sysKey != GRNTypeWithPO && sysKey != GRNTypeWithoutPO
+
+		// The per-line productionID stamp is driven by the *product's kind*,
+		// not the GRN type — so a customer's crude oil stays segregated
+		// whether it's arriving on a Refining Intake GRN, coming back as an
+		// unused portion on a Production Return, or leaving as the refined
+		// output on a Production Output GRN. Our own PRODUCT stock never
+		// gets the stamp (production_id stays NULL = general pool).
 		for _, line := range grn.Lines {
 			ratio := line.TransferRatio
 			if ratio <= 0 {
@@ -313,25 +329,46 @@ func (r *dbRepository) ConfirmGRN(ctx context.Context, tenantID, grnID uint, con
 			if line.LocationID != nil {
 				locationID = uint64(*line.LocationID)
 			}
+
+			// Per-line stamp: REFINING_INTAKE-kind products are segregated
+			// by the linked production regardless of the GRN's document type.
+			var linePID uint64
+			if grn.MOID != nil {
+				var kind string
+				_ = tx.Raw(`SELECT kind FROM products WHERE id = ?`, line.ProductID).
+					Row().Scan(&kind)
+				if kind == "REFINING_INTAKE" {
+					linePID = uint64(*grn.MOID)
+				}
+			}
+
 			if postStockNow {
 				ledgerRows = append(ledgerRows, stockLedgerRow{
-					productID:   uint64(line.ProductID),
-					variantID:   variantID,
-					warehouseID: uint64(grn.WarehouseID),
-					locationID:  locationID,
-					qty:         stockQty,
-					unitCost:    stockUnitCost,
-					total:       stockTotal,
-					date:        grn.ReceiptDate,
+					productID:    uint64(line.ProductID),
+					variantID:    variantID,
+					warehouseID:  uint64(grn.WarehouseID),
+					locationID:   locationID,
+					productionID: linePID,
+					qty:          stockQty,
+					unitCost:     stockUnitCost,
+					total:        stockTotal,
+					date:         grn.ReceiptDate,
 				})
 
+				// stock_balances.production_id is part of the uniqueness key
+				// (see migration 000041) so refinery intake stays segregated
+				// per Production while general stock pools under NULL.
+				var productionIDArg any
+				if linePID > 0 {
+					productionIDArg = linePID
+				}
 				if err := tx.Exec(`
 					INSERT INTO stock_balances
-						(tenant_id, product_id, variant_id, warehouse_id, location_id, quantity, updated_at)
-					VALUES (?, ?, ?, ?, ?, ?, NOW())
+						(tenant_id, product_id, variant_id, warehouse_id, location_id, production_id, quantity, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
 					ON CONFLICT ON CONSTRAINT uidx_stock_balances
 					DO UPDATE SET quantity = stock_balances.quantity + EXCLUDED.quantity, updated_at = NOW()`,
-					tenantID, line.ProductID, line.VariantID, grn.WarehouseID, line.LocationID, stockQty,
+					tenantID, line.ProductID, line.VariantID, grn.WarehouseID, line.LocationID, productionIDArg, stockQty,
 				).Error; err != nil {
 					return err
 				}
@@ -369,16 +406,26 @@ func (r *dbRepository) writeStockLedger(ctx context.Context, tenantID, grnID, co
 		return
 	}
 	for _, row := range rows {
-		_, _ = r.ledgerDB.ExecContext(ctx, `
+		var productionIDArg any
+		if row.productionID > 0 {
+			productionIDArg = row.productionID
+		}
+		date := row.date
+		if len(date) >= 10 {
+			date = date[:10] // ClickHouse Date wants YYYY-MM-DD, not RFC3339.
+		}
+		if _, err := r.ledgerDB.ExecContext(ctx, `
 			INSERT INTO stock_ledger
 				(tenant_id, product_id, variant_id, warehouse_id, location_id,
 				 transaction_type, reference_type, reference_id,
-				 quantity, unit_cost, total_cost, transaction_date, created_by)
-			VALUES (?, ?, ?, ?, ?, 'PURCHASE', 'GOODS_RECEIPT', ?, ?, ?, ?, ?, ?)`,
+				 quantity, unit_cost, total_cost, transaction_date, created_by, production_id)
+			VALUES (?, ?, ?, ?, ?, 'PURCHASE', 'GOODS_RECEIPT', ?, ?, ?, ?, ?, ?, ?)`,
 			uint64(tenantID), row.productID, row.variantID,
 			row.warehouseID, row.locationID,
-			uint64(grnID), row.qty, row.unitCost, row.total, row.date, uint64(confirmedBy),
-		)
+			uint64(grnID), row.qty, row.unitCost, row.total, date, uint64(confirmedBy), productionIDArg,
+		); err != nil {
+			logger.Warn("GRN stock_ledger write failed", logger.String("err", err.Error()))
+		}
 	}
 }
 

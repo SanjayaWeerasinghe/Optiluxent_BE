@@ -50,12 +50,33 @@ type DocumentTypeResolver interface {
 	FindSystemType(ctx context.Context, tenantID uint, model, systemKey string) (uint, error)
 }
 
+// ProductKindProvider exposes just the piece of the products module the
+// stock-touching flows need: what Kind a given product is. Used to reject
+// SERVICE-kind products from lines that would otherwise create stock rows.
+// Satisfied by masterdata/products.Service.
+type ProductKindProvider interface {
+	Kind(ctx context.Context, tenantID, productID uint) (string, error)
+}
+
+// FinancePostGL is the tiny interface procurement uses to trigger a
+// journal entry after the PI post + payment record. Satisfied by
+// finance.Service directly (structural match).
+type FinancePostGL interface {
+	PostPIToGL(ctx context.Context, tenantID, userID, piID uint) (interface{}, error)
+	// RecordInvoicePayment inserts a payments row via the finance module
+	// so the payment log is populated in addition to updating the
+	// invoice's paid_amount scalar. Best-effort — swallowed on error.
+	RecordInvoicePaymentPI(ctx context.Context, tenantID, userID, piID uint, amount float64, method, referenceNo, notes string, bankAccountID *uint, paymentDate string) error
+}
+
 type Service struct {
 	repo Repository
 	bus  events.EventBus
 	qc   QCAutoCreator
 	mo   MOProducedBumper
 	dt   DocumentTypeResolver
+	pk   ProductKindProvider
+	fin  FinancePostGL
 }
 
 func NewService(repo Repository) *Service                        { return &Service{repo: repo} }
@@ -63,6 +84,66 @@ func (s *Service) SetEventBus(bus events.EventBus)               { s.bus = bus }
 func (s *Service) SetQCAutoCreator(qc QCAutoCreator)             { s.qc = qc }
 func (s *Service) SetMOProducedBumper(mo MOProducedBumper)       { s.mo = mo }
 func (s *Service) SetDocumentTypeResolver(dt DocumentTypeResolver) { s.dt = dt }
+func (s *Service) SetProductKindProvider(pk ProductKindProvider)  { s.pk = pk }
+func (s *Service) SetFinancePoster(fin FinancePostGL)             { s.fin = fin }
+
+// ApplyInvoicePayment is called by the finance module when it records a
+// payment against a PI. Bumps paid_amount + status. Returns supplier +
+// currency so finance can stamp its payment row. Uses the same half-cent
+// rounding tolerance as RecordPayment.
+func (s *Service) ApplyInvoicePayment(ctx context.Context, tenantID, invoiceID uint, amount float64) (partyID, currencyID uint, err error) {
+	inv, err := s.repo.GetInvoice(ctx, tenantID, invoiceID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("purchase invoice not found")
+	}
+	if inv.Status == InvStatusDraft {
+		return 0, 0, fmt.Errorf("invoice must be posted before recording payment")
+	}
+	if inv.Status == InvStatusCancelled {
+		return 0, 0, fmt.Errorf("cannot record payment on a cancelled invoice")
+	}
+	if amount <= 0 {
+		return 0, 0, fmt.Errorf("payment amount must be greater than zero")
+	}
+	remaining := inv.TotalAmount - inv.PaidAmount
+	if amount > remaining+0.005 {
+		return 0, 0, fmt.Errorf("payment amount %.2f exceeds remaining balance %.2f", amount, remaining)
+	}
+	inv.PaidAmount += amount
+	if inv.PaidAmount >= inv.TotalAmount-0.005 {
+		inv.Status = InvStatusPaid
+	} else {
+		inv.Status = InvStatusPartial
+	}
+	if err := s.repo.UpdateInvoice(ctx, inv); err != nil {
+		return 0, 0, err
+	}
+	return inv.SupplierID, inv.CurrencyID, nil
+}
+
+// LookupInvoicePI implements finance.InvoiceLookup for PI headers.
+func (s *Service) LookupInvoicePI(ctx context.Context, tenantID, invoiceID uint) (partyID, currencyID uint, totalAmount, taxAmount float64, err error) {
+	inv, err := s.repo.GetInvoice(ctx, tenantID, invoiceID)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return inv.SupplierID, inv.CurrencyID, inv.TotalAmount, inv.TaxAmount, nil
+}
+
+// isNonStockableProduct returns true if the product is a SERVICE kind and
+// therefore should never appear on stock-hitting lines (GRN items, DO lines,
+// etc.). Silently returns false when the provider isn't wired — behaviour
+// stays unchanged for callers that haven't opted in yet.
+func (s *Service) isNonStockableProduct(ctx context.Context, tenantID, productID uint) bool {
+	if s.pk == nil || productID == 0 {
+		return false
+	}
+	kind, err := s.pk.Kind(ctx, tenantID, productID)
+	if err != nil {
+		return false
+	}
+	return kind == "SERVICE"
+}
 
 // resolveDocTypeKey looks up a DocumentType's system_key with a safe fallback.
 // Returns "" (no behavioural switch) if the resolver is not wired, the id is
@@ -478,6 +559,12 @@ func (s *Service) AddPOItem(ctx context.Context, tenantID, poID uint, req *AddPO
 	if po.Status != POStatusDraft {
 		return nil, fmt.Errorf("cannot add items to a %s purchase order", po.Status)
 	}
+	// Cap against source PR when this PO was created from one.
+	if po.PRID != nil {
+		if err := s.ValidatePOQtyAgainstPR(ctx, tenantID, *po.PRID, req.ProductID, req.Quantity, 0); err != nil {
+			return nil, err
+		}
+	}
 	line := &POLine{
 		POID:          poID,
 		TenantID:      tenantID,
@@ -514,6 +601,13 @@ func (s *Service) UpdatePOItem(ctx context.Context, tenantID, poID, itemID uint,
 	line, err := s.repo.GetPOItem(ctx, tenantID, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("item not found")
+	}
+	// Cap against source PR when this PO was created from one. Exclude the
+	// current line so its own pre-edit qty doesn't self-count.
+	if po.PRID != nil {
+		if err := s.ValidatePOQtyAgainstPR(ctx, tenantID, *po.PRID, req.ProductID, req.Quantity, line.ID); err != nil {
+			return nil, err
+		}
 	}
 	line.ProductID = req.ProductID
 	line.VariantID = req.VariantID
@@ -744,6 +838,15 @@ func (s *Service) AddGRNItem(ctx context.Context, tenantID, grnID uint, req *Add
 	if grn.Status != GRNStatusDraft {
 		return nil, fmt.Errorf("cannot add items to a %s goods receipt", grn.Status)
 	}
+	if s.isNonStockableProduct(ctx, tenantID, req.ProductID) {
+		return nil, fmt.Errorf("service products cannot be added to a goods receipt")
+	}
+	// Cap against source PO line when this GRN line is tied to one.
+	if req.POLineID != nil {
+		if err := s.ValidateGRNQtyAgainstPOLine(ctx, tenantID, *req.POLineID, req.Quantity, 0); err != nil {
+			return nil, err
+		}
+	}
 	ratio := transferRatioOrOne(req.TransferRatio)
 	line := &GRNLine{
 		GRNID:         grnID,
@@ -774,6 +877,13 @@ func (s *Service) UpdateGRNItem(ctx context.Context, tenantID, grnID, itemID uin
 	line, err := s.repo.GetGRNItem(ctx, tenantID, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("item not found")
+	}
+	// Cap against source PO line. previousQty = this line's current qty so the
+	// delta (new - previous) is what we compare against remaining.
+	if line.POLineID != nil {
+		if err := s.ValidateGRNQtyAgainstPOLine(ctx, tenantID, *line.POLineID, req.Quantity, line.Quantity); err != nil {
+			return nil, err
+		}
 	}
 	ratio := transferRatioOrOne(req.TransferRatio)
 	line.ProductID = req.ProductID
@@ -1023,6 +1133,10 @@ func (s *Service) PostInvoice(ctx context.Context, tenantID, id, userID uint) (*
 		TotalAmount:    inv.TotalAmount,
 		PostedBy:       userID,
 	})
+	// Best-effort GL post — failure only logs, doesn't roll back the post.
+	if s.fin != nil {
+		_, _ = s.fin.PostPIToGL(ctx, tenantID, userID, inv.ID)
+	}
 	return inv, nil
 }
 
@@ -1060,11 +1174,15 @@ func (s *Service) RecordPayment(ctx context.Context, tenantID, id uint, req *Rec
 		return nil, fmt.Errorf("payment amount must be greater than zero")
 	}
 	remaining := inv.TotalAmount - inv.PaidAmount
-	if req.Amount > remaining {
+	// Allow half a cent of overpay to absorb float rounding — the same
+	// tolerance used when deciding when the invoice becomes fully paid.
+	if req.Amount > remaining+0.005 {
 		return nil, fmt.Errorf("payment amount %.2f exceeds remaining balance %.2f", req.Amount, remaining)
 	}
 	inv.PaidAmount += req.Amount
-	if inv.PaidAmount >= inv.TotalAmount {
+	// Fully paid when the running total covers the invoice, within half a
+	// cent — accumulating multiple float payments can leave a sub-cent gap.
+	if inv.PaidAmount >= inv.TotalAmount-0.005 {
 		inv.Status = InvStatusPaid
 	} else {
 		inv.Status = InvStatusPartial
@@ -1088,6 +1206,13 @@ func (s *Service) RecordPayment(ctx context.Context, tenantID, id uint, req *Rec
 		PaymentDate: payDate,
 		PaymentRef:  req.PaymentRef,
 	})
+	// The historic /pay endpoint didn't collect method or bank_account, so
+	// we default to OTHER. Callers wanting rich metadata should POST to
+	// /finance/payments instead. Best-effort — swallow errors.
+	if s.fin != nil {
+		_ = s.fin.RecordInvoicePaymentPI(ctx, tenantID, 0, inv.ID, req.Amount,
+			"OTHER", req.PaymentRef, "", nil, payDate)
+	}
 	return inv, nil
 }
 

@@ -802,5 +802,35 @@ func (h *Handler) GetStockBalance(c *fiber.Ctx) error {
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to retrieve stock balances")
 	}
+	// Decorate each row with SUM(active allocations) so the FE can render
+	// Available = Quantity − Reserved. The allocation service handles nil
+	// gracefully so this stays working if wiring isn't in place yet.
+	if alloc := h.svc.Allocation(); alloc != nil {
+		for i := range rows {
+			r := &rows[i]
+			reserved, _ := alloc.ReservedByProductWarehouse(c.Context(), tenantID, r.ProductID, r.WarehouseID)
+			r.ReservedQty = reserved
+		}
+	}
 	return httputil.Success(c, "stock balances retrieved", rows)
+}
+
+// ListAllocations — flat list of ACTIVE stock reservations for the FE
+// Allocations section. Optional filters: product_id, warehouse_id,
+// source_type, source_doc_id.
+func (h *Handler) ListAllocations(c *fiber.Ctx) error {
+	if h.svc.Allocation() == nil {
+		return httputil.InternalServerError(c, "allocation service not wired")
+	}
+	f := AllocationFilters{
+		ProductID:   parseOptionalUint(c.Query("product_id")),
+		WarehouseID: parseOptionalUint(c.Query("warehouse_id")),
+		SourceType:  c.Query("source_type"),
+		SourceDocID: parseOptionalUint(c.Query("source_doc_id")),
+	}
+	rows, err := h.svc.Allocation().ListActive(c.Context(), tenantFromCtx(c), f)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to retrieve allocations")
+	}
+	return httputil.Success(c, "allocations retrieved", rows)
 }
