@@ -10,6 +10,10 @@ type CreatePartyRequest struct {
 	CurrencyID    uint    `json:"currency_id"     validate:"required"`
 	PaymentTermID *uint   `json:"payment_term_id"`
 	CreditLimit   float64 `json:"credit_limit"    validate:"omitempty,min=0"`
+	// CASH: SO confirm blocks until any prior unpaid invoice is settled.
+	// CREDIT: SO confirm blocks when outstanding + this order exceeds credit_limit.
+	// Defaults to CREDIT.
+	CreditType    string  `json:"credit_type"     validate:"omitempty,oneof=CASH CREDIT"`
 	Notes         string  `json:"notes"`
 }
 
@@ -21,6 +25,7 @@ type UpdatePartyRequest struct {
 	CurrencyID    uint     `json:"currency_id"     validate:"omitempty"`
 	PaymentTermID *uint    `json:"payment_term_id"`
 	CreditLimit   *float64 `json:"credit_limit"`
+	CreditType    string   `json:"credit_type"     validate:"omitempty,oneof=CASH CREDIT"`
 	IsActive      *bool    `json:"is_active"`
 	Notes         string   `json:"notes"`
 }

@@ -10,6 +10,16 @@ var validPartyTypes = map[string]bool{"CUSTOMER": true, "SUPPLIER": true, "BOTH"
 var validTypes = map[string]bool{"INDIVIDUAL": true, "COMPANY": true}
 var validAddressTypes = map[string]bool{"BILLING": true, "SHIPPING": true, "BOTH": true}
 
+// defaultCreditType returns CREDIT when the caller doesn't specify one —
+// matches the DB DEFAULT so behaviour is consistent whether the field is
+// omitted from the request or explicitly left blank.
+func defaultCreditType(v string) string {
+	if v == "" {
+		return "CREDIT"
+	}
+	return v
+}
+
 type Service struct{ repo Repository }
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
@@ -54,6 +64,7 @@ func (s *Service) CreateParty(ctx context.Context, tenantID uint, req *CreatePar
 		CurrencyID:    req.CurrencyID,
 		PaymentTermID: req.PaymentTermID,
 		CreditLimit:   req.CreditLimit,
+		CreditType:    defaultCreditType(req.CreditType),
 		IsActive:      true,
 		Notes:         req.Notes,
 	}
@@ -92,6 +103,9 @@ func (s *Service) UpdateParty(ctx context.Context, tenantID, id uint, req *Updat
 	p.PaymentTermID = req.PaymentTermID
 	if req.CreditLimit != nil {
 		p.CreditLimit = *req.CreditLimit
+	}
+	if req.CreditType != "" {
+		p.CreditType = req.CreditType
 	}
 	if req.IsActive != nil {
 		p.IsActive = *req.IsActive

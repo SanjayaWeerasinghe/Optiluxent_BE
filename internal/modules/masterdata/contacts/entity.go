@@ -18,6 +18,7 @@ type Party struct {
 	CurrencyID    uint           `json:"currency_id"     gorm:"not null"`
 	PaymentTermID *uint          `json:"payment_term_id"`
 	CreditLimit   float64        `json:"credit_limit"    gorm:"not null;default:0"`
+	CreditType    string         `json:"credit_type"     gorm:"not null;size:10;default:CREDIT"`
 	IsActive      bool           `json:"is_active"       gorm:"not null;default:true"`
 	Notes         string         `json:"notes"`
 	CreatedAt     time.Time      `json:"created_at"`
