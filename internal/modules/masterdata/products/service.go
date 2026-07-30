@@ -145,6 +145,17 @@ func (s *Service) GetProduct(ctx context.Context, tenantID, id uint) (*Product, 
 	return s.repo.GetProduct(ctx, tenantID, id)
 }
 
+// Kind returns the product's Kind (PRODUCT / SERVICE / REFINING_INTAKE) —
+// consumed by other modules via a thin ProductKindProvider interface to
+// keep stock-hitting flows from accepting service items.
+func (s *Service) Kind(ctx context.Context, tenantID, id uint) (string, error) {
+	p, err := s.repo.GetProduct(ctx, tenantID, id)
+	if err != nil {
+		return "", err
+	}
+	return p.Kind, nil
+}
+
 func (s *Service) CreateProduct(ctx context.Context, tenantID uint, req *CreateProductRequest) (*Product, error) {
 	pType := req.ProductType
 	if pType == "" {
@@ -153,12 +164,17 @@ func (s *Service) CreateProduct(ctx context.Context, tenantID uint, req *CreateP
 	if !validProductTypes[pType] {
 		return nil, fmt.Errorf("invalid product_type: %s", pType)
 	}
+	kind := req.Kind
+	if kind == "" {
+		kind = "PRODUCT"
+	}
 	p := &Product{
 		TenantID:       tenantID,
 		Code:           req.Code,
 		Name:           req.Name,
 		Description:    req.Description,
 		ProductType:    pType,
+		Kind:           kind,
 		CategoryID:     req.CategoryID,
 		BaseUOMID:      req.BaseUOMID,
 		PurchaseUOMID:  req.PurchaseUOMID,
@@ -200,6 +216,9 @@ func (s *Service) UpdateProduct(ctx context.Context, tenantID, id uint, req *Upd
 			return nil, fmt.Errorf("invalid product_type: %s", req.ProductType)
 		}
 		p.ProductType = req.ProductType
+	}
+	if req.Kind != "" {
+		p.Kind = req.Kind
 	}
 	p.CategoryID = req.CategoryID
 	if req.BaseUOMID != 0 {

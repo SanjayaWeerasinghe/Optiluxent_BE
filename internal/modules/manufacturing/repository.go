@@ -31,6 +31,13 @@ type Repository interface {
 	UpdatePlan(ctx context.Context, plan *ProductionPlan) error
 	DeletePlan(ctx context.Context, tenantID, id uint) error
 
+	// Production Plan Inputs
+	ListPlanInputs(ctx context.Context, tenantID, planID uint) ([]ProductionPlanInput, error)
+	GetPlanInput(ctx context.Context, tenantID, planID, inputID uint) (*ProductionPlanInput, error)
+	AddPlanInput(ctx context.Context, input *ProductionPlanInput) error
+	UpdatePlanInput(ctx context.Context, input *ProductionPlanInput) error
+	DeletePlanInput(ctx context.Context, tenantID, inputID uint) error
+
 	// Production Orders
 	ListOrders(ctx context.Context, tenantID uint, status string) ([]ProductionOrder, error)
 	GetOrder(ctx context.Context, tenantID, id uint) (*ProductionOrder, error)
@@ -159,9 +166,39 @@ func (r *dbRepository) ListPlans(ctx context.Context, tenantID uint, status stri
 
 func (r *dbRepository) GetPlan(ctx context.Context, tenantID, id uint) (*ProductionPlan, error) {
 	var plan ProductionPlan
-	err := r.db.WithContext(ctx).
+	err := r.db.WithContext(ctx).Preload("Inputs").
 		Where("tenant_id = ? AND id = ?", tenantID, id).First(&plan).Error
 	return &plan, err
+}
+
+// ── Production Plan Inputs ────────────────────────────────────────────────────
+
+func (r *dbRepository) ListPlanInputs(ctx context.Context, tenantID, planID uint) ([]ProductionPlanInput, error) {
+	var rows []ProductionPlanInput
+	return rows, r.db.WithContext(ctx).
+		Where("tenant_id = ? AND plan_id = ?", tenantID, planID).
+		Order("line_number ASC").Find(&rows).Error
+}
+
+func (r *dbRepository) GetPlanInput(ctx context.Context, tenantID, planID, inputID uint) (*ProductionPlanInput, error) {
+	var row ProductionPlanInput
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND plan_id = ? AND id = ?", tenantID, planID, inputID).First(&row).Error
+	return &row, err
+}
+
+func (r *dbRepository) AddPlanInput(ctx context.Context, input *ProductionPlanInput) error {
+	return r.db.WithContext(ctx).Create(input).Error
+}
+
+func (r *dbRepository) UpdatePlanInput(ctx context.Context, input *ProductionPlanInput) error {
+	return r.db.WithContext(ctx).Save(input).Error
+}
+
+func (r *dbRepository) DeletePlanInput(ctx context.Context, tenantID, inputID uint) error {
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND id = ?", tenantID, inputID).
+		Delete(&ProductionPlanInput{}).Error
 }
 
 func (r *dbRepository) CreatePlan(ctx context.Context, plan *ProductionPlan) error {

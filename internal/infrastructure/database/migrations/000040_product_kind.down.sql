@@ -1,0 +1,3 @@
+DELETE FROM products WHERE code = 'CRUDE-REFINE';
+DROP INDEX IF EXISTS idx_products_kind;
+ALTER TABLE products DROP COLUMN IF EXISTS kind;

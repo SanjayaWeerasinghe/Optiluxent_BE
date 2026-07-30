@@ -279,6 +279,89 @@ func (h *Handler) CancelPlan(c *fiber.Ctx) error {
 	return httputil.Success(c, "production plan cancelled", plan)
 }
 
+func (h *Handler) CreateOrderFromPlan(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	order, err := h.svc.CreateOrderFromPlan(c.Context(), tenantFromCtx(c), id, userFromCtx(c))
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Created(c, "production order created from plan", order)
+}
+
+// ── Production Plan Inputs ────────────────────────────────────────────────────
+
+func (h *Handler) ListPlanInputs(c *fiber.Ctx) error {
+	planID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	inputs, err := h.svc.ListPlanInputs(c.Context(), tenantFromCtx(c), planID)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "plan inputs retrieved", inputs)
+}
+
+func (h *Handler) AddPlanInput(c *fiber.Ctx) error {
+	planID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid id")
+	}
+	var req AddPlanInputRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	if errs := validateStruct(h.validate, req); errs != nil {
+		return httputil.ValidationError(c, "validation failed", errs)
+	}
+	input, err := h.svc.AddPlanInput(c.Context(), tenantFromCtx(c), planID, &req)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Created(c, "plan input added", input)
+}
+
+func (h *Handler) UpdatePlanInput(c *fiber.Ctx) error {
+	planID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid plan id")
+	}
+	inputID, err := parseID(c, "inputId")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid input id")
+	}
+	var req UpdatePlanInputRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.BadRequest(c, "invalid request body")
+	}
+	if errs := validateStruct(h.validate, req); errs != nil {
+		return httputil.ValidationError(c, "validation failed", errs)
+	}
+	input, err := h.svc.UpdatePlanInput(c.Context(), tenantFromCtx(c), planID, inputID, &req)
+	if err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.Success(c, "plan input updated", input)
+}
+
+func (h *Handler) DeletePlanInput(c *fiber.Ctx) error {
+	planID, err := parseID(c, "id")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid plan id")
+	}
+	inputID, err := parseID(c, "inputId")
+	if err != nil {
+		return httputil.BadRequest(c, "invalid input id")
+	}
+	if err := h.svc.DeletePlanInput(c.Context(), tenantFromCtx(c), planID, inputID); err != nil {
+		return httputil.BadRequest(c, err.Error())
+	}
+	return httputil.NoContent(c)
+}
+
 // ── Production Orders ─────────────────────────────────────────────────────────
 
 func (h *Handler) ListOrders(c *fiber.Ctx) error {

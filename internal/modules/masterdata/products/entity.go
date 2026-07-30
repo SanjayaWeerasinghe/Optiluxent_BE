@@ -42,6 +42,10 @@ type Product struct {
 	Name           string         `json:"name"            gorm:"not null;size:200"`
 	Description    string         `json:"description"`
 	ProductType    string         `json:"product_type"    gorm:"not null;size:20;default:FINISHED"`
+	// Kind separates our own goods (PRODUCT), bill-only services (SERVICE)
+	// that never touch stock, and customer-owned refining intake
+	// (REFINING_INTAKE) which is segregated per production.
+	Kind           string         `json:"kind"            gorm:"not null;size:20;default:PRODUCT"`
 	CategoryID     *uint          `json:"category_id"`
 	BaseUOMID       uint           `json:"base_uom_id"       gorm:"not null"`
 	PurchaseUOMID   *uint          `json:"purchase_uom_id"`

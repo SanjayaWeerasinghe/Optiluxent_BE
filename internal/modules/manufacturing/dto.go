@@ -38,6 +38,8 @@ type AddEstimateLineRequest struct {
 // ── Production Plan DTOs ──────────────────────────────────────────────────────
 
 type CreatePlanRequest struct {
+	SOID             *uint   `json:"so_id"`
+	DocumentTypeID   *uint   `json:"document_type_id"`
 	ProductID        uint    `json:"product_id"         validate:"required"`
 	UOMID            uint    `json:"uom_id"             validate:"required"`
 	PlannedQty       float64 `json:"planned_qty"        validate:"omitempty,min=0"`
@@ -51,6 +53,8 @@ type CreatePlanRequest struct {
 }
 
 type UpdatePlanRequest struct {
+	SOID             *uint   `json:"so_id"`
+	DocumentTypeID   *uint   `json:"document_type_id"`
 	ProductID        uint    `json:"product_id"         validate:"required"`
 	UOMID            uint    `json:"uom_id"             validate:"required"`
 	PlannedQty       float64 `json:"planned_qty"        validate:"omitempty,min=0"`
@@ -63,10 +67,27 @@ type UpdatePlanRequest struct {
 	Notes            string  `json:"notes"`
 }
 
+// ── Production Plan Inputs ────────────────────────────────────────────────────
+
+type AddPlanInputRequest struct {
+	ProductID uint    `json:"product_id" validate:"required"`
+	Quantity  float64 `json:"quantity"   validate:"required,min=0"`
+	UOMID     uint    `json:"uom_id"     validate:"required"`
+	Notes     string  `json:"notes"      validate:"omitempty,max=500"`
+}
+
+type UpdatePlanInputRequest struct {
+	ProductID uint    `json:"product_id" validate:"required"`
+	Quantity  float64 `json:"quantity"   validate:"required,min=0"`
+	UOMID     uint    `json:"uom_id"     validate:"required"`
+	Notes     string  `json:"notes"      validate:"omitempty,max=500"`
+}
+
 // ── Production Order DTOs ─────────────────────────────────────────────────────
 
 type CreateOrderRequest struct {
 	PlanID      *uint   `json:"plan_id"`
+	SOID        *uint   `json:"so_id"`
 	ProductID   uint    `json:"product_id"   validate:"required"`
 	UOMID       uint    `json:"uom_id"       validate:"required"`
 	PlannedQty  float64 `json:"planned_qty"  validate:"omitempty,min=0"`
@@ -78,6 +99,7 @@ type CreateOrderRequest struct {
 
 type UpdateOrderRequest struct {
 	PlanID      *uint   `json:"plan_id"`
+	SOID        *uint   `json:"so_id"`
 	ProductID   uint    `json:"product_id"   validate:"required"`
 	UOMID       uint    `json:"uom_id"       validate:"required"`
 	PlannedQty  float64 `json:"planned_qty"  validate:"omitempty,min=0"`

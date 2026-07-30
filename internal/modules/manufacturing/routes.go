@@ -43,6 +43,15 @@ func RegisterRoutes(router fiber.Router, h *Handler, enforcer rbac.Enforcer, aud
 	// Plan workflow
 	plans.Post("/:id/release", canApprove, auditMW, h.ReleasePlan)
 	plans.Post("/:id/cancel", canWrite, auditMW, h.CancelPlan)
+	// Spawn a draft Production from a released Plan (copies product/qty/inputs).
+	plans.Post("/:id/create-production", canWrite, auditMW, h.CreateOrderFromPlan)
+
+	// Plan Inputs — anticipated chemicals/resources; copied into MO Resources
+	// when a Production is manually created from a released Plan.
+	plans.Get("/:id/inputs", canRead, h.ListPlanInputs)
+	plans.Post("/:id/inputs", canWrite, auditMW, h.AddPlanInput)
+	plans.Put("/:id/inputs/:inputId", canWrite, auditMW, h.UpdatePlanInput)
+	plans.Delete("/:id/inputs/:inputId", canDelete, auditMW, h.DeletePlanInput)
 
 	// ── Production Orders ───────────────────────────────────────────────────────
 	orders := router.Group("/orders")

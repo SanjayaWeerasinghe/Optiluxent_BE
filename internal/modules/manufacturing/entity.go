@@ -83,6 +83,11 @@ type ProductionPlan struct {
 	ID               uint           `json:"id"                 gorm:"primaryKey"`
 	TenantID         uint           `json:"tenant_id"          gorm:"not null;index"`
 	Code             string         `json:"code"               gorm:"not null;size:50"`
+	// SOID links this Plan to a Sales Order — populated for Refinery Service
+	// Plans so the resulting Production carries the customer/SO context.
+	SOID             *uint          `json:"so_id"`
+	// DocumentTypeID classifies the Plan (e.g. REFINING_PLAN system_key).
+	DocumentTypeID   *uint          `json:"document_type_id"`
 	ProductID        uint           `json:"product_id"         gorm:"not null"`
 	UOMID            uint           `json:"uom_id"             gorm:"not null"`
 	PlannedQty       float64        `json:"planned_qty"`
@@ -97,12 +102,31 @@ type ProductionPlan struct {
 	ReleasedBy       *uint          `json:"released_by"`
 	ReleasedAt       *time.Time     `json:"released_at"`
 	CreatedBy        *uint          `json:"created_by"`
+	Inputs           []ProductionPlanInput `json:"inputs,omitempty" gorm:"foreignKey:PlanID"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 func (ProductionPlan) TableName() string { return "production_plans" }
+
+// ProductionPlanInput lists the chemicals / materials / other resources the
+// Plan anticipates consuming. Copied into MO.ProductionResource rows when a
+// Production is manually created from the released Plan.
+type ProductionPlanInput struct {
+	ID         uint      `json:"id"          gorm:"primaryKey"`
+	PlanID     uint      `json:"plan_id"     gorm:"not null;index"`
+	TenantID   uint      `json:"tenant_id"   gorm:"not null;index"`
+	LineNumber int       `json:"line_number" gorm:"not null;default:1"`
+	ProductID  uint      `json:"product_id"  gorm:"not null"`
+	Quantity   float64   `json:"quantity"    gorm:"not null;default:0"`
+	UOMID      uint      `json:"uom_id"      gorm:"not null"`
+	Notes      string    `json:"notes"       gorm:"size:500"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (ProductionPlanInput) TableName() string { return "production_plan_inputs" }
 
 // ── Production Order ──────────────────────────────────────────────────────────
 
@@ -118,6 +142,7 @@ type ProductionOrder struct {
 	TenantID    uint               `json:"tenant_id"    gorm:"not null;index"`
 	Code        string             `json:"code"         gorm:"not null;size:50"`
 	PlanID      *uint              `json:"plan_id"`
+	SOID        *uint              `json:"so_id"` // Sales-order-based MOs; mutually exclusive with plan_id in the UI.
 	ProductID   uint               `json:"product_id"   gorm:"not null"`
 	UOMID       uint               `json:"uom_id"       gorm:"not null"`
 	PlannedQty  float64            `json:"planned_qty"`

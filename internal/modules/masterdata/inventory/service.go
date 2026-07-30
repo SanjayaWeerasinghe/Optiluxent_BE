@@ -111,6 +111,35 @@ func (s *Service) UpdateLocation(ctx context.Context, tenantID uint, req *Update
 	return existing, s.repo.UpdateLocation(ctx, existing)
 }
 
+// EnsureDamagedLocation returns the id of the DAMAGED-type storage
+// location for the given warehouse, creating it if none exists. Called
+// from inventory.SubmitQualityCheck when a QC has failed qty that
+// needs somewhere to land — the flow never dead-ends because a
+// warehouse forgot to seed a damaged bin.
+func (s *Service) EnsureDamagedLocation(ctx context.Context, tenantID, warehouseID uint) (uint, error) {
+	locs, err := s.repo.ListLocations(ctx, tenantID, warehouseID)
+	if err != nil {
+		return 0, err
+	}
+	for _, l := range locs {
+		if l.LocationType == "DAMAGED" && l.IsActive {
+			return l.ID, nil
+		}
+	}
+	fresh := &StorageLocation{
+		TenantID:     tenantID,
+		WarehouseID:  warehouseID,
+		Code:         "DAMAGED",
+		Name:         "Damaged Stock",
+		LocationType: "DAMAGED",
+		IsActive:     true,
+	}
+	if err := s.repo.CreateLocation(ctx, fresh); err != nil {
+		return 0, fmt.Errorf("failed to auto-create DAMAGED bin: %w", err)
+	}
+	return fresh.ID, nil
+}
+
 func (s *Service) CreateStockEntry(ctx context.Context, tenantID uint, req *CreateStockEntryRequest) (*StockLedger, error) {
 	if !validTxTypes[req.TransactionType] {
 		return nil, fmt.Errorf("invalid transaction_type: %s", req.TransactionType)

@@ -123,8 +123,14 @@ var schemaDDL = []string{
 		transaction_date Date,
 		notes            String,
 		created_at       DateTime64(3) DEFAULT now64(),
-		created_by       UInt64
+		created_by       UInt64,
+		production_id    UInt64 DEFAULT 0
 	) ENGINE = MergeTree()
 	PARTITION BY toYYYYMM(transaction_date)
 	ORDER BY (tenant_id, transaction_date, product_id)`,
+
+	// Idempotent add for tables that pre-existed before production_id was
+	// introduced (migration 000041 on the Postgres side). Silently no-ops
+	// on fresh installs because the column is already in the CREATE above.
+	`ALTER TABLE stock_ledger ADD COLUMN IF NOT EXISTS production_id UInt64 DEFAULT 0`,
 }

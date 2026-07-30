@@ -312,6 +312,8 @@ func (s *Service) CreatePlan(ctx context.Context, tenantID, userID uint, req *Cr
 	plan := &ProductionPlan{
 		TenantID:         tenantID,
 		Code:             code,
+		SOID:             req.SOID,
+		DocumentTypeID:   req.DocumentTypeID,
 		ProductID:        req.ProductID,
 		UOMID:            req.UOMID,
 		PlannedQty:       req.PlannedQty,
@@ -339,6 +341,8 @@ func (s *Service) UpdatePlan(ctx context.Context, tenantID, id uint, req *Update
 	if plan.Status != PlanStatusDraft {
 		return nil, fmt.Errorf("only DRAFT production plans can be updated")
 	}
+	plan.SOID = req.SOID
+	plan.DocumentTypeID = req.DocumentTypeID
 	plan.ProductID = req.ProductID
 	plan.UOMID = req.UOMID
 	plan.PlannedQty = req.PlannedQty
@@ -364,6 +368,99 @@ func (s *Service) DeletePlan(ctx context.Context, tenantID, id uint) error {
 		return fmt.Errorf("only DRAFT production plans can be deleted")
 	}
 	return s.repo.DeletePlan(ctx, tenantID, id)
+}
+
+// CreateOrderFromPlan spawns a draft ProductionOrder that inherits the
+// released Plan's product, qty, warehouse, and inputs. Called by the
+// "Create Production" workflow button on the Plan modal.
+func (s *Service) CreateOrderFromPlan(ctx context.Context, tenantID, planID, userID uint) (*ProductionOrder, error) {
+	plan, err := s.repo.GetPlan(ctx, tenantID, planID)
+	if err != nil {
+		return nil, fmt.Errorf("production plan not found")
+	}
+	if plan.Status != PlanStatusReleased {
+		return nil, fmt.Errorf("only RELEASED plans can spawn a Production")
+	}
+	planIDCopy := plan.ID
+	req := &CreateOrderRequest{
+		PlanID:      &planIDCopy,
+		ProductID:   plan.ProductID,
+		UOMID:       plan.UOMID,
+		PlannedQty:  plan.PlannedQty,
+		WarehouseID: plan.WarehouseID,
+		StartDate:   plan.PlannedStartDate,
+		EndDate:     plan.PlannedEndDate,
+		Notes:       plan.Notes,
+	}
+	return s.CreateOrder(ctx, tenantID, userID, req)
+}
+
+// ── Production Plan Inputs ────────────────────────────────────────────────────
+
+func (s *Service) ListPlanInputs(ctx context.Context, tenantID, planID uint) ([]ProductionPlanInput, error) {
+	if _, err := s.repo.GetPlan(ctx, tenantID, planID); err != nil {
+		return nil, fmt.Errorf("production plan not found")
+	}
+	return s.repo.ListPlanInputs(ctx, tenantID, planID)
+}
+
+func (s *Service) AddPlanInput(ctx context.Context, tenantID, planID uint, req *AddPlanInputRequest) (*ProductionPlanInput, error) {
+	plan, err := s.repo.GetPlan(ctx, tenantID, planID)
+	if err != nil {
+		return nil, fmt.Errorf("production plan not found")
+	}
+	if plan.Status != PlanStatusDraft {
+		return nil, fmt.Errorf("only DRAFT production plans accept new inputs")
+	}
+	input := &ProductionPlanInput{
+		PlanID:     planID,
+		TenantID:   tenantID,
+		LineNumber: len(plan.Inputs) + 1,
+		ProductID:  req.ProductID,
+		Quantity:   req.Quantity,
+		UOMID:      req.UOMID,
+		Notes:      req.Notes,
+	}
+	if err := s.repo.AddPlanInput(ctx, input); err != nil {
+		return nil, err
+	}
+	return input, nil
+}
+
+func (s *Service) UpdatePlanInput(ctx context.Context, tenantID, planID, inputID uint, req *UpdatePlanInputRequest) (*ProductionPlanInput, error) {
+	plan, err := s.repo.GetPlan(ctx, tenantID, planID)
+	if err != nil {
+		return nil, fmt.Errorf("production plan not found")
+	}
+	if plan.Status != PlanStatusDraft {
+		return nil, fmt.Errorf("only DRAFT production plans accept input edits")
+	}
+	input, err := s.repo.GetPlanInput(ctx, tenantID, planID, inputID)
+	if err != nil {
+		return nil, fmt.Errorf("plan input not found")
+	}
+	input.ProductID = req.ProductID
+	input.Quantity = req.Quantity
+	input.UOMID = req.UOMID
+	input.Notes = req.Notes
+	if err := s.repo.UpdatePlanInput(ctx, input); err != nil {
+		return nil, err
+	}
+	return input, nil
+}
+
+func (s *Service) DeletePlanInput(ctx context.Context, tenantID, planID, inputID uint) error {
+	plan, err := s.repo.GetPlan(ctx, tenantID, planID)
+	if err != nil {
+		return fmt.Errorf("production plan not found")
+	}
+	if plan.Status != PlanStatusDraft {
+		return fmt.Errorf("only DRAFT production plans accept input deletes")
+	}
+	if _, err := s.repo.GetPlanInput(ctx, tenantID, planID, inputID); err != nil {
+		return fmt.Errorf("plan input not found")
+	}
+	return s.repo.DeletePlanInput(ctx, tenantID, inputID)
 }
 
 func (s *Service) ReleasePlan(ctx context.Context, tenantID, id, userID uint) (*ProductionPlan, error) {
@@ -421,6 +518,7 @@ func (s *Service) CreateOrder(ctx context.Context, tenantID, userID uint, req *C
 		TenantID:    tenantID,
 		Code:        code,
 		PlanID:      req.PlanID,
+		SOID:        req.SOID,
 		ProductID:   req.ProductID,
 		UOMID:       req.UOMID,
 		PlannedQty:  req.PlannedQty,
@@ -434,6 +532,28 @@ func (s *Service) CreateOrder(ctx context.Context, tenantID, userID uint, req *C
 	if err := s.repo.CreateOrder(ctx, order); err != nil {
 		return nil, err
 	}
+	// If this MO was spawned from a Plan, copy the Plan's anticipated inputs
+	// into MO ProductionResource rows so the shop-floor form starts with the
+	// materials list pre-filled. Best-effort — silently skip if the Plan has
+	// no inputs or the copy fails.
+	if req.PlanID != nil {
+		inputs, err := s.repo.ListPlanInputs(ctx, tenantID, *req.PlanID)
+		if err == nil {
+			for i, in := range inputs {
+				res := &ProductionResource{
+					OrderID:      order.ID,
+					TenantID:     tenantID,
+					LineNumber:   i + 1,
+					ResourceType: ResourceTypeMaterial,
+					ProductID:    &in.ProductID,
+					Quantity:     in.Quantity,
+					UOMID:        &in.UOMID,
+					Notes:        in.Notes,
+				}
+				_ = s.repo.AddResource(ctx, res)
+			}
+		}
+	}
 	return order, nil
 }
 
@@ -446,6 +566,7 @@ func (s *Service) UpdateOrder(ctx context.Context, tenantID, id uint, req *Updat
 		return nil, fmt.Errorf("only DRAFT production orders can be updated")
 	}
 	order.PlanID = req.PlanID
+	order.SOID = req.SOID
 	order.ProductID = req.ProductID
 	order.UOMID = req.UOMID
 	order.PlannedQty = req.PlannedQty

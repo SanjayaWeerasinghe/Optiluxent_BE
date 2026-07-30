@@ -32,6 +32,7 @@ type CreateProductRequest struct {
 	Name           string  `json:"name"            validate:"required,min=1,max=200"`
 	Description    string  `json:"description"`
 	ProductType    string  `json:"product_type"    validate:"omitempty"`
+	Kind           string  `json:"kind"            validate:"omitempty,oneof=PRODUCT SERVICE REFINING_INTAKE"`
 	CategoryID     *uint   `json:"category_id"`
 	BaseUOMID      uint    `json:"base_uom_id"     validate:"required"`
 	PurchaseUOMID  *uint   `json:"purchase_uom_id"`
@@ -52,6 +53,7 @@ type UpdateProductRequest struct {
 	Name           string   `json:"name"            validate:"omitempty,min=1,max=200"`
 	Description    string   `json:"description"`
 	ProductType    string   `json:"product_type"    validate:"omitempty"`
+	Kind           string   `json:"kind"            validate:"omitempty,oneof=PRODUCT SERVICE REFINING_INTAKE"`
 	CategoryID     *uint    `json:"category_id"`
 	BaseUOMID      uint     `json:"base_uom_id"     validate:"omitempty"`
 	PurchaseUOMID  *uint    `json:"purchase_uom_id"`
