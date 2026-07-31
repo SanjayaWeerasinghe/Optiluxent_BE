@@ -22,7 +22,10 @@ type Repository interface {
 	GetEmergency(ctx context.Context, tenantID, id uint) (*EmergencyContact, error)
 
 	// Attendance — one row per (employee, date); Upsert handles conflict.
-	ListAttendance(ctx context.Context, tenantID uint, employeeID uint, from, to string) ([]Attendance, error)
+	// `limit=0` = unbounded. Per-employee tabs still fetch everything for
+	// the small volumes they show; the cross-employee list uses pagination.
+	ListAttendance(ctx context.Context, tenantID uint, employeeID uint, from, to string, limit, offset int) ([]Attendance, error)
+	CountAttendance(ctx context.Context, tenantID uint, employeeID uint, from, to string) (int64, error)
 	UpsertAttendance(ctx context.Context, a *Attendance) error
 	DeleteAttendance(ctx context.Context, tenantID, id uint) error
 
@@ -94,8 +97,9 @@ func (r *dbRepository) DeleteEmergency(ctx context.Context, tenantID, id uint) e
 
 // ── Attendance ──────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListAttendance(ctx context.Context, tenantID, employeeID uint, from, to string) ([]Attendance, error) {
-	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+// attendanceFilterWhere — shared filter body for List + Count.
+func attendanceFilterWhere(q *gorm.DB, tenantID, employeeID uint, from, to string) *gorm.DB {
+	q = q.Where("tenant_id = ?", tenantID)
 	if employeeID > 0 {
 		q = q.Where("employee_id = ?", employeeID)
 	}
@@ -105,8 +109,22 @@ func (r *dbRepository) ListAttendance(ctx context.Context, tenantID, employeeID 
 	if to != "" {
 		q = q.Where("attend_date <= ?", to)
 	}
+	return q
+}
+
+func (r *dbRepository) ListAttendance(ctx context.Context, tenantID, employeeID uint, from, to string, limit, offset int) ([]Attendance, error) {
+	q := attendanceFilterWhere(r.db.WithContext(ctx), tenantID, employeeID, from, to).
+		Order("attend_date DESC, employee_id")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []Attendance
-	return rows, q.Order("attend_date DESC, employee_id").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountAttendance(ctx context.Context, tenantID, employeeID uint, from, to string) (int64, error) {
+	var n int64
+	return n, attendanceFilterWhere(r.db.WithContext(ctx).Model(&Attendance{}), tenantID, employeeID, from, to).Count(&n).Error
 }
 
 // UpsertAttendance — one row per (employee, date). Uses the DB unique

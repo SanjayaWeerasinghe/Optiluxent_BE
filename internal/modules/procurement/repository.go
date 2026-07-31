@@ -26,8 +26,9 @@ type Repository interface {
 	// Document sequence
 	NextCode(ctx context.Context, tenantID uint, docType string) (string, error)
 
-	// Purchase Requests
-	ListPRs(ctx context.Context, tenantID uint, status string) ([]PurchaseRequest, error)
+	// Purchase Requests. `limit=0` means "no LIMIT" (unbounded).
+	ListPRs(ctx context.Context, tenantID uint, status string, limit, offset int) ([]PurchaseRequest, error)
+	CountPRs(ctx context.Context, tenantID uint, status string) (int64, error)
 	GetPR(ctx context.Context, tenantID, id uint) (*PurchaseRequest, error)
 	CreatePR(ctx context.Context, pr *PurchaseRequest) error
 	UpdatePR(ctx context.Context, pr *PurchaseRequest) error
@@ -40,8 +41,9 @@ type Repository interface {
 	UpdatePRItem(ctx context.Context, line *PRLine) error
 	DeletePRItem(ctx context.Context, tenantID, id uint) error
 
-	// Purchase Orders
-	ListPOs(ctx context.Context, tenantID uint, status string, supplierID *uint) ([]PurchaseOrder, error)
+	// Purchase Orders. `limit=0` means "no LIMIT" (unbounded).
+	ListPOs(ctx context.Context, tenantID uint, status string, supplierID *uint, limit, offset int) ([]PurchaseOrder, error)
+	CountPOs(ctx context.Context, tenantID uint, status string, supplierID *uint) (int64, error)
 	GetPO(ctx context.Context, tenantID, id uint) (*PurchaseOrder, error)
 	CreatePO(ctx context.Context, po *PurchaseOrder) error
 	UpdatePO(ctx context.Context, po *PurchaseOrder) error
@@ -54,8 +56,9 @@ type Repository interface {
 	UpdatePOItem(ctx context.Context, line *POLine) error
 	DeletePOItem(ctx context.Context, tenantID, id uint) error
 
-	// Goods Receipts
-	ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint) ([]GoodsReceipt, error)
+	// Goods Receipts. `limit=0` means "no LIMIT" (unbounded).
+	ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint, limit, offset int) ([]GoodsReceipt, error)
+	CountGRNs(ctx context.Context, tenantID uint, status string, poID *uint) (int64, error)
 	ListGRNsByMO(ctx context.Context, tenantID, moID uint) ([]GoodsReceipt, error)
 	GetGRN(ctx context.Context, tenantID, id uint) (*GoodsReceipt, error)
 	CreateGRN(ctx context.Context, grn *GoodsReceipt) error
@@ -70,7 +73,8 @@ type Repository interface {
 	UpdateGRNItem(ctx context.Context, line *GRNLine) error
 
 	// Purchase Invoices
-	ListInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint) ([]PurchaseInvoice, error)
+	ListInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint, limit, offset int) ([]PurchaseInvoice, error)
+	CountInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint) (int64, error)
 	GetInvoice(ctx context.Context, tenantID, id uint) (*PurchaseInvoice, error)
 	GetDraftInvoiceByPOID(ctx context.Context, tenantID, poID uint) (*PurchaseInvoice, error)
 	POInvoiceIsLocked(ctx context.Context, tenantID, poID uint) (bool, error)
@@ -116,13 +120,26 @@ func (r *dbRepository) NextCode(ctx context.Context, tenantID uint, docType stri
 
 // ── Purchase Requests ─────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListPRs(ctx context.Context, tenantID uint, status string) ([]PurchaseRequest, error) {
+func (r *dbRepository) ListPRs(ctx context.Context, tenantID uint, status string, limit, offset int) ([]PurchaseRequest, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []PurchaseRequest
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountPRs(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&PurchaseRequest{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetPR(ctx context.Context, tenantID, id uint) (*PurchaseRequest, error) {
@@ -170,7 +187,7 @@ func (r *dbRepository) DeletePRItem(ctx context.Context, tenantID, id uint) erro
 
 // ── Purchase Orders ───────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListPOs(ctx context.Context, tenantID uint, status string, supplierID *uint) ([]PurchaseOrder, error) {
+func (r *dbRepository) ListPOs(ctx context.Context, tenantID uint, status string, supplierID *uint, limit, offset int) ([]PurchaseOrder, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -178,8 +195,24 @@ func (r *dbRepository) ListPOs(ctx context.Context, tenantID uint, status string
 	if supplierID != nil {
 		q = q.Where("supplier_id = ?", *supplierID)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []PurchaseOrder
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountPOs(ctx context.Context, tenantID uint, status string, supplierID *uint) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&PurchaseOrder{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if supplierID != nil {
+		q = q.Where("supplier_id = ?", *supplierID)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetPO(ctx context.Context, tenantID, id uint) (*PurchaseOrder, error) {
@@ -227,7 +260,7 @@ func (r *dbRepository) DeletePOItem(ctx context.Context, tenantID, id uint) erro
 
 // ── Goods Receipts ────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint) ([]GoodsReceipt, error) {
+func (r *dbRepository) ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint, limit, offset int) ([]GoodsReceipt, error) {
 	// Preload lines — used by the PI extra panel to roll up received qty per
 	// product across every GRN linked to a PO. Fine at tenant scale; the
 	// query is already gated by tenant_id and (optionally) po_id.
@@ -238,8 +271,24 @@ func (r *dbRepository) ListGRNs(ctx context.Context, tenantID uint, status strin
 	if poID != nil {
 		q = q.Where("po_id = ?", *poID)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []GoodsReceipt
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountGRNs(ctx context.Context, tenantID uint, status string, poID *uint) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&GoodsReceipt{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if poID != nil {
+		q = q.Where("po_id = ?", *poID)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) ListGRNsByMO(ctx context.Context, tenantID, moID uint) ([]GoodsReceipt, error) {
@@ -451,7 +500,7 @@ func (r *dbRepository) UpdateGRNItem(ctx context.Context, line *GRNLine) error {
 
 // ── Purchase Invoices ─────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint) ([]PurchaseInvoice, error) {
+func (r *dbRepository) ListInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint, limit, offset int) ([]PurchaseInvoice, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -459,8 +508,24 @@ func (r *dbRepository) ListInvoices(ctx context.Context, tenantID uint, status s
 	if supplierID != nil {
 		q = q.Where("supplier_id = ?", *supplierID)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []PurchaseInvoice
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&PurchaseInvoice{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if supplierID != nil {
+		q = q.Where("supplier_id = ?", *supplierID)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetInvoice(ctx context.Context, tenantID, id uint) (*PurchaseInvoice, error) {

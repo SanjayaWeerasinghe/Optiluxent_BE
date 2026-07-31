@@ -13,7 +13,8 @@ type Repository interface {
 	// Sales Quotations
 	NextSQCode(ctx context.Context, tenantID uint) (string, error)
 	CreateSQ(ctx context.Context, sq *SalesQuotation) error
-	ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesQuotation, error)
+	ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesQuotation, error)
+	CountSQs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error)
 	GetSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error)
 	UpdateSQ(ctx context.Context, sq *SalesQuotation) error
 	DeleteSQ(ctx context.Context, tenantID, id uint) error
@@ -26,7 +27,8 @@ type Repository interface {
 	// Sales Orders
 	NextSOCode(ctx context.Context, tenantID uint) (string, error)
 	CreateSO(ctx context.Context, so *SalesOrder) error
-	ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesOrder, error)
+	ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesOrder, error)
+	CountSOs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error)
 	GetSO(ctx context.Context, tenantID, id uint) (*SalesOrder, error)
 	UpdateSO(ctx context.Context, so *SalesOrder) error
 	DeleteSO(ctx context.Context, tenantID, id uint) error
@@ -39,7 +41,8 @@ type Repository interface {
 	// Delivery Orders
 	NextDOCode(ctx context.Context, tenantID uint) (string, error)
 	CreateDO(ctx context.Context, do *DeliveryOrder) error
-	ListDOs(ctx context.Context, tenantID uint, soID *uint, status string) ([]DeliveryOrder, error)
+	ListDOs(ctx context.Context, tenantID uint, soID *uint, status string, limit, offset int) ([]DeliveryOrder, error)
+	CountDOs(ctx context.Context, tenantID uint, soID *uint, status string) (int64, error)
 	GetDO(ctx context.Context, tenantID, id uint) (*DeliveryOrder, error)
 	UpdateDO(ctx context.Context, do *DeliveryOrder) error
 	AddDOLine(ctx context.Context, line *DOLine) error
@@ -53,7 +56,8 @@ type Repository interface {
 	// Sales Invoices
 	NextSICode(ctx context.Context, tenantID uint) (string, error)
 	CreateSI(ctx context.Context, si *SalesInvoice) error
-	ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesInvoice, error)
+	ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesInvoice, error)
+	CountSIs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error)
 	GetSI(ctx context.Context, tenantID, id uint) (*SalesInvoice, error)
 	GetDraftInvoiceBySOID(ctx context.Context, tenantID, soID uint) (*SalesInvoice, error)
 	UpdateSI(ctx context.Context, si *SalesInvoice) error
@@ -119,7 +123,7 @@ func (r *dbRepository) CreateSQ(ctx context.Context, sq *SalesQuotation) error {
 	return r.db.WithContext(ctx).Create(sq).Error
 }
 
-func (r *dbRepository) ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesQuotation, error) {
+func (r *dbRepository) ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesQuotation, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if customerID != nil {
 		q = q.Where("customer_id = ?", *customerID)
@@ -127,8 +131,24 @@ func (r *dbRepository) ListSQs(ctx context.Context, tenantID uint, customerID *u
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []SalesQuotation
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountSQs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&SalesQuotation{}).Where("tenant_id = ?", tenantID)
+	if customerID != nil {
+		q = q.Where("customer_id = ?", *customerID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error) {
@@ -183,7 +203,7 @@ func (r *dbRepository) CreateSO(ctx context.Context, so *SalesOrder) error {
 	return r.db.WithContext(ctx).Create(so).Error
 }
 
-func (r *dbRepository) ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesOrder, error) {
+func (r *dbRepository) ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesOrder, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if customerID != nil {
 		q = q.Where("customer_id = ?", *customerID)
@@ -191,8 +211,24 @@ func (r *dbRepository) ListSOs(ctx context.Context, tenantID uint, customerID *u
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []SalesOrder
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountSOs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&SalesOrder{}).Where("tenant_id = ?", tenantID)
+	if customerID != nil {
+		q = q.Where("customer_id = ?", *customerID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetSO(ctx context.Context, tenantID, id uint) (*SalesOrder, error) {
@@ -247,7 +283,7 @@ func (r *dbRepository) CreateDO(ctx context.Context, do *DeliveryOrder) error {
 	return r.db.WithContext(ctx).Create(do).Error
 }
 
-func (r *dbRepository) ListDOs(ctx context.Context, tenantID uint, soID *uint, status string) ([]DeliveryOrder, error) {
+func (r *dbRepository) ListDOs(ctx context.Context, tenantID uint, soID *uint, status string, limit, offset int) ([]DeliveryOrder, error) {
 	// Preload lines — the SI extras panel rolls up delivered qty per product
 	// across every DO linked to an SO. Same pattern as procurement.ListGRNs.
 	q := r.db.WithContext(ctx).Preload("Lines").Where("tenant_id = ?", tenantID)
@@ -257,8 +293,24 @@ func (r *dbRepository) ListDOs(ctx context.Context, tenantID uint, soID *uint, s
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []DeliveryOrder
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountDOs(ctx context.Context, tenantID uint, soID *uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&DeliveryOrder{}).Where("tenant_id = ?", tenantID)
+	if soID != nil {
+		q = q.Where("so_id = ?", *soID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetDO(ctx context.Context, tenantID, id uint) (*DeliveryOrder, error) {
@@ -419,7 +471,7 @@ func (r *dbRepository) CreateSI(ctx context.Context, si *SalesInvoice) error {
 	return r.db.WithContext(ctx).Create(si).Error
 }
 
-func (r *dbRepository) ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesInvoice, error) {
+func (r *dbRepository) ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesInvoice, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if customerID != nil {
 		q = q.Where("customer_id = ?", *customerID)
@@ -427,8 +479,24 @@ func (r *dbRepository) ListSIs(ctx context.Context, tenantID uint, customerID *u
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []SalesInvoice
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountSIs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&SalesInvoice{}).Where("tenant_id = ?", tenantID)
+	if customerID != nil {
+		q = q.Where("customer_id = ?", *customerID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetSI(ctx context.Context, tenantID, id uint) (*SalesInvoice, error) {

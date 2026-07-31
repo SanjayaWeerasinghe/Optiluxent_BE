@@ -40,7 +40,7 @@ func (s *Service) ValidatePOQtyAgainstPR(
 
 	// 2. Sum every existing PO line for this product across every PO
 	// referencing this PR. Exclude the caller's own line on Update.
-	pos, err := s.repo.ListPOs(ctx, tenantID, "", nil)
+	pos, err := s.repo.ListPOs(ctx, tenantID, "", nil, 0, 0)
 	if err != nil {
 		return fmt.Errorf("read POs: %w", err)
 	}

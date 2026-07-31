@@ -187,18 +187,23 @@ func JSON(c *fiber.Ctx, status int, data interface{}) error {
 
 // ParsePage extracts page/per_page from query params.
 // Returns page, perPage, limit (=perPage), offset ((page-1)*perPage).
-// Defaults: page=1, per_page=20, max per_page=100.
+//
+// Defaults are generous: page=1, per_page=500, cap=1000. The high default
+// is so legacy callers (E2E specs, the FE's non-paginated list fetches)
+// that don't specify `?per_page` still see a realistic tenant's worth of
+// rows in one response. Pages that use the shared `<Pagination>` UI
+// explicitly pass `per_page=20` (or whatever the row-picker is set to).
 func ParsePage(c *fiber.Ctx) (page, perPage, limit, offset int) {
 	page, _ = strconv.Atoi(c.Query("page", "1"))
-	perPage, _ = strconv.Atoi(c.Query("per_page", "20"))
+	perPage, _ = strconv.Atoi(c.Query("per_page", "500"))
 	if page < 1 {
 		page = 1
 	}
 	if perPage < 1 {
-		perPage = 20
+		perPage = 500
 	}
-	if perPage > 100 {
-		perPage = 100
+	if perPage > 1000 {
+		perPage = 1000
 	}
 	return page, perPage, perPage, (page - 1) * perPage
 }

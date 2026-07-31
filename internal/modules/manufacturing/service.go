@@ -296,8 +296,11 @@ func (s *Service) DeleteEstimateLine(ctx context.Context, tenantID, estimateID, 
 
 // ── Production Plans ──────────────────────────────────────────────────────────
 
-func (s *Service) ListPlans(ctx context.Context, tenantID uint, status string) ([]ProductionPlan, error) {
-	return s.repo.ListPlans(ctx, tenantID, status)
+func (s *Service) ListPlans(ctx context.Context, tenantID uint, status string, limit, offset int) ([]ProductionPlan, error) {
+	return s.repo.ListPlans(ctx, tenantID, status, limit, offset)
+}
+func (s *Service) CountPlans(ctx context.Context, tenantID uint, status string) (int64, error) {
+	return s.repo.CountPlans(ctx, tenantID, status)
 }
 
 func (s *Service) GetPlan(ctx context.Context, tenantID, id uint) (*ProductionPlan, error) {
@@ -501,8 +504,11 @@ func (s *Service) CancelPlan(ctx context.Context, tenantID, id uint) (*Productio
 
 // ── Production Orders ─────────────────────────────────────────────────────────
 
-func (s *Service) ListOrders(ctx context.Context, tenantID uint, status string) ([]ProductionOrder, error) {
-	return s.repo.ListOrders(ctx, tenantID, status)
+func (s *Service) ListOrders(ctx context.Context, tenantID uint, status string, limit, offset int) ([]ProductionOrder, error) {
+	return s.repo.ListOrders(ctx, tenantID, status, limit, offset)
+}
+func (s *Service) CountOrders(ctx context.Context, tenantID uint, status string) (int64, error) {
+	return s.repo.CountOrders(ctx, tenantID, status)
 }
 
 func (s *Service) GetOrder(ctx context.Context, tenantID, id uint) (*ProductionOrder, error) {

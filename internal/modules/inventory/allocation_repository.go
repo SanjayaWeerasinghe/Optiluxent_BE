@@ -32,8 +32,9 @@ type AllocationRepository interface {
 	// derive the Stock Overview "Reserved" column.
 	SumReservedByProductWarehouse(ctx context.Context, tenantID, productID, warehouseID uint) (float64, error)
 
-	// ListActive — for the FE Allocations section.
-	ListActive(ctx context.Context, tenantID uint, filters AllocationFilters) ([]Allocation, error)
+	// ListActive — for the FE Allocations section. `limit=0` = unbounded.
+	ListActive(ctx context.Context, tenantID uint, filters AllocationFilters, limit, offset int) ([]Allocation, error)
+	CountActive(ctx context.Context, tenantID uint, filters AllocationFilters) (int64, error)
 
 	// Access to the underlying gorm.DB — allocation_service reaches for a
 	// transaction with SELECT FOR UPDATE on stock_balances, which is a
@@ -161,8 +162,10 @@ func (r *dbAllocationRepository) SumReservedByProductWarehouse(ctx context.Conte
 	return total, err
 }
 
-func (r *dbAllocationRepository) ListActive(ctx context.Context, tenantID uint, filters AllocationFilters) ([]Allocation, error) {
-	q := r.db.WithContext(ctx).Where("tenant_id = ? AND status = ?", tenantID, AllocStatusActive)
+// allocFilterWhere applies the AllocationFilters conditions to a *gorm.DB —
+// factored so ListActive + CountActive stay in sync.
+func allocFilterWhere(q *gorm.DB, tenantID uint, filters AllocationFilters) *gorm.DB {
+	q = q.Where("tenant_id = ? AND status = ?", tenantID, AllocStatusActive)
 	if filters.ProductID != nil {
 		q = q.Where("product_id = ?", *filters.ProductID)
 	}
@@ -175,7 +178,19 @@ func (r *dbAllocationRepository) ListActive(ctx context.Context, tenantID uint, 
 	if filters.SourceDocID != nil {
 		q = q.Where("source_doc_id = ?", *filters.SourceDocID)
 	}
+	return q
+}
+
+func (r *dbAllocationRepository) ListActive(ctx context.Context, tenantID uint, filters AllocationFilters, limit, offset int) ([]Allocation, error) {
+	q := allocFilterWhere(r.db.WithContext(ctx), tenantID, filters).Order("id DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []Allocation
-	err := q.Order("id DESC").Find(&rows).Error
-	return rows, err
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbAllocationRepository) CountActive(ctx context.Context, tenantID uint, filters AllocationFilters) (int64, error) {
+	var n int64
+	return n, allocFilterWhere(r.db.WithContext(ctx).Model(&Allocation{}), tenantID, filters).Count(&n).Error
 }

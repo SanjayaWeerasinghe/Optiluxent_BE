@@ -15,13 +15,16 @@ type Repository interface {
 	CreatePayment(ctx context.Context, p *Payment) error
 	UpdatePayment(ctx context.Context, p *Payment) error
 	GetPayment(ctx context.Context, tenantID, id uint) (*Payment, error)
-	ListPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID uint, partyID uint, direction string, limit int) ([]Payment, error)
+	// ListPayments — `limit=0` = unbounded. Offset added for pagination.
+	ListPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID uint, partyID uint, direction string, limit, offset int) ([]Payment, error)
+	CountPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID uint, partyID uint, direction string) (int64, error)
 	SumPaymentsByInvoice(ctx context.Context, tenantID uint, invoiceKind string, invoiceID uint) (float64, error)
 
-	// Journal entries
+	// Journal entries. `limit=0` = unbounded.
 	CreateJournalEntry(ctx context.Context, je *JournalEntry) error
 	GetJournalEntry(ctx context.Context, tenantID, id uint) (*JournalEntry, error)
-	ListJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint, limit int) ([]JournalEntry, error)
+	ListJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint, limit, offset int) ([]JournalEntry, error)
+	CountJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint) (int64, error)
 
 	// Settings
 	GetSettings(ctx context.Context, tenantID uint) (*FinanceSettings, error)
@@ -83,8 +86,9 @@ func (r *dbRepository) GetPayment(ctx context.Context, tenantID, id uint) (*Paym
 	return &p, r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).First(&p).Error
 }
 
-func (r *dbRepository) ListPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string, limit int) ([]Payment, error) {
-	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+// paymentFilterWhere — factored so ListPayments + CountPayments share filters.
+func paymentFilterWhere(q *gorm.DB, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string) *gorm.DB {
+	q = q.Where("tenant_id = ?", tenantID)
 	if invoiceKind != "" {
 		q = q.Where("invoice_kind = ?", invoiceKind)
 	}
@@ -97,12 +101,22 @@ func (r *dbRepository) ListPayments(ctx context.Context, tenantID uint, invoiceK
 	if direction != "" {
 		q = q.Where("direction = ?", direction)
 	}
-	q = q.Order("created_at DESC")
+	return q
+}
+
+func (r *dbRepository) ListPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string, limit, offset int) ([]Payment, error) {
+	q := paymentFilterWhere(r.db.WithContext(ctx), tenantID, invoiceKind, invoiceID, partyID, direction).
+		Order("created_at DESC")
 	if limit > 0 {
-		q = q.Limit(limit)
+		q = q.Limit(limit).Offset(offset)
 	}
 	var rows []Payment
 	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string) (int64, error) {
+	var n int64
+	return n, paymentFilterWhere(r.db.WithContext(ctx).Model(&Payment{}), tenantID, invoiceKind, invoiceID, partyID, direction).Count(&n).Error
 }
 
 func (r *dbRepository) SumPaymentsByInvoice(ctx context.Context, tenantID uint, invoiceKind string, invoiceID uint) (float64, error) {
@@ -128,20 +142,30 @@ func (r *dbRepository) GetJournalEntry(ctx context.Context, tenantID, id uint) (
 	return &je, err
 }
 
-func (r *dbRepository) ListJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint, limit int) ([]JournalEntry, error) {
-	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+// jeFilterWhere — shared filter body for List + Count.
+func jeFilterWhere(q *gorm.DB, tenantID uint, sourceType string, sourceID uint) *gorm.DB {
+	q = q.Where("tenant_id = ?", tenantID)
 	if sourceType != "" {
 		q = q.Where("source_type = ?", sourceType)
 	}
 	if sourceID > 0 {
 		q = q.Where("source_id = ?", sourceID)
 	}
-	q = q.Order("post_date DESC, id DESC")
+	return q
+}
+
+func (r *dbRepository) ListJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint, limit, offset int) ([]JournalEntry, error) {
+	q := jeFilterWhere(r.db.WithContext(ctx), tenantID, sourceType, sourceID).Order("post_date DESC, id DESC")
 	if limit > 0 {
-		q = q.Limit(limit)
+		q = q.Limit(limit).Offset(offset)
 	}
 	var rows []JournalEntry
 	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint) (int64, error) {
+	var n int64
+	return n, jeFilterWhere(r.db.WithContext(ctx).Model(&JournalEntry{}), tenantID, sourceType, sourceID).Count(&n).Error
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────

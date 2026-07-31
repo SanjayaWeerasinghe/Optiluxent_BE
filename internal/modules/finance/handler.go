@@ -66,17 +66,22 @@ func (h *Handler) RecordPayment(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ListPayments(c *fiber.Ctx) error {
+	tenantID := tenantFromCtx(c)
 	invoiceKind := c.Query("invoice_kind")
 	invoiceID, _ := strconv.ParseUint(c.Query("invoice_id", "0"), 10, 64)
 	partyID, _ := strconv.ParseUint(c.Query("party_id", "0"), 10, 64)
 	direction := c.Query("direction")
-	limit, _ := strconv.Atoi(c.Query("limit", "100"))
-	rows, err := h.svc.ListPayments(c.Context(), tenantFromCtx(c),
-		invoiceKind, uint(invoiceID), uint(partyID), direction, limit)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountPayments(c.Context(), tenantID, invoiceKind, uint(invoiceID), uint(partyID), direction)
 	if err != nil {
 		return httputil.InternalServerError(c, err.Error())
 	}
-	return httputil.Success(c, "payments retrieved", rows)
+	rows, err := h.svc.ListPayments(c.Context(), tenantID,
+		invoiceKind, uint(invoiceID), uint(partyID), direction, limit, offset)
+	if err != nil {
+		return httputil.InternalServerError(c, err.Error())
+	}
+	return httputil.SuccessWithMeta(c, "payments retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetPayment(c *fiber.Ctx) error {
@@ -94,15 +99,20 @@ func (h *Handler) GetPayment(c *fiber.Ctx) error {
 // ── Journal Entries ─────────────────────────────────────────────────────────
 
 func (h *Handler) ListJournalEntries(c *fiber.Ctx) error {
+	tenantID := tenantFromCtx(c)
 	sourceType := c.Query("source_type")
 	sourceID, _ := strconv.ParseUint(c.Query("source_id", "0"), 10, 64)
-	limit, _ := strconv.Atoi(c.Query("limit", "100"))
-	rows, err := h.svc.ListJournalEntries(c.Context(), tenantFromCtx(c),
-		sourceType, uint(sourceID), limit)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountJournalEntries(c.Context(), tenantID, sourceType, uint(sourceID))
 	if err != nil {
 		return httputil.InternalServerError(c, err.Error())
 	}
-	return httputil.Success(c, "journal entries retrieved", rows)
+	rows, err := h.svc.ListJournalEntries(c.Context(), tenantID,
+		sourceType, uint(sourceID), limit, offset)
+	if err != nil {
+		return httputil.InternalServerError(c, err.Error())
+	}
+	return httputil.SuccessWithMeta(c, "journal entries retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetJournalEntry(c *fiber.Ctx) error {

@@ -92,8 +92,11 @@ func (s *Service) DeleteEmergency(ctx context.Context, tenantID, id uint) error 
 
 // ── Attendance ──────────────────────────────────────────────────────────────
 
-func (s *Service) ListAttendance(ctx context.Context, tenantID uint, employeeID uint, from, to string) ([]Attendance, error) {
-	return s.repo.ListAttendance(ctx, tenantID, employeeID, from, to)
+func (s *Service) ListAttendance(ctx context.Context, tenantID uint, employeeID uint, from, to string, limit, offset int) ([]Attendance, error) {
+	return s.repo.ListAttendance(ctx, tenantID, employeeID, from, to, limit, offset)
+}
+func (s *Service) CountAttendance(ctx context.Context, tenantID uint, employeeID uint, from, to string) (int64, error) {
+	return s.repo.CountAttendance(ctx, tenantID, employeeID, from, to)
 }
 
 // UpsertAttendance — POST to /hr/employees/:id/attendance is idempotent

@@ -59,11 +59,17 @@ func (h *Handler) ListSQs(c *fiber.Ctx) error {
 			customerID = &v
 		}
 	}
-	rows, err := h.svc.ListSQs(c.Context(), tenantID, customerID, c.Query("status"))
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountSQs(c.Context(), tenantID, customerID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count quotations")
+	}
+	rows, err := h.svc.ListSQs(c.Context(), tenantID, customerID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list quotations")
 	}
-	return httputil.Success(c, "quotations retrieved", rows)
+	return httputil.SuccessWithMeta(c, "quotations retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetSQ(c *fiber.Ctx) error {
@@ -269,11 +275,17 @@ func (h *Handler) ListSOs(c *fiber.Ctx) error {
 			customerID = &v
 		}
 	}
-	rows, err := h.svc.ListSOs(c.Context(), tenantID, customerID, c.Query("status"))
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountSOs(c.Context(), tenantID, customerID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count sales orders")
+	}
+	rows, err := h.svc.ListSOs(c.Context(), tenantID, customerID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list sales orders")
 	}
-	return httputil.Success(c, "sales orders retrieved", rows)
+	return httputil.SuccessWithMeta(c, "sales orders retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetSO(c *fiber.Ctx) error {
@@ -452,11 +464,17 @@ func (h *Handler) ListDOs(c *fiber.Ctx) error {
 			soID = &v
 		}
 	}
-	rows, err := h.svc.ListDOs(c.Context(), tenantID, soID, c.Query("status"))
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountDOs(c.Context(), tenantID, soID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count delivery orders")
+	}
+	rows, err := h.svc.ListDOs(c.Context(), tenantID, soID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list delivery orders")
 	}
-	return httputil.Success(c, "delivery orders retrieved", rows)
+	return httputil.SuccessWithMeta(c, "delivery orders retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetDO(c *fiber.Ctx) error {
@@ -624,11 +642,17 @@ func (h *Handler) ListSIs(c *fiber.Ctx) error {
 			customerID = &v
 		}
 	}
-	rows, err := h.svc.ListSIs(c.Context(), tenantID, customerID, c.Query("status"))
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountSIs(c.Context(), tenantID, customerID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count sales invoices")
+	}
+	rows, err := h.svc.ListSIs(c.Context(), tenantID, customerID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list sales invoices")
 	}
-	return httputil.Success(c, "sales invoices retrieved", rows)
+	return httputil.SuccessWithMeta(c, "sales invoices retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetSI(c *fiber.Ctx) error {

@@ -51,11 +51,18 @@ func parseID(c *fiber.Ctx, param string) (uint, error) {
 // ── Purchase Requests ─────────────────────────────────────────────────────────
 
 func (h *Handler) ListPRs(c *fiber.Ctx) error {
-	rows, err := h.svc.ListPRs(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountPRs(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count purchase requests")
+	}
+	rows, err := h.svc.ListPRs(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list purchase requests")
 	}
-	return httputil.Success(c, "purchase requests retrieved", rows)
+	return httputil.SuccessWithMeta(c, "purchase requests retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetPR(c *fiber.Ctx) error {
@@ -251,11 +258,17 @@ func (h *Handler) ListPOs(c *fiber.Ctx) error {
 			supplierID = &v
 		}
 	}
-	rows, err := h.svc.ListPOs(c.Context(), tenantID, c.Query("status"), supplierID)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountPOs(c.Context(), tenantID, status, supplierID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count purchase orders")
+	}
+	rows, err := h.svc.ListPOs(c.Context(), tenantID, status, supplierID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list purchase orders")
 	}
-	return httputil.Success(c, "purchase orders retrieved", rows)
+	return httputil.SuccessWithMeta(c, "purchase orders retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetPO(c *fiber.Ctx) error {
@@ -434,11 +447,17 @@ func (h *Handler) ListGRNs(c *fiber.Ctx) error {
 			poID = &v
 		}
 	}
-	rows, err := h.svc.ListGRNs(c.Context(), tenantID, c.Query("status"), poID)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountGRNs(c.Context(), tenantID, status, poID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count goods receipts")
+	}
+	rows, err := h.svc.ListGRNs(c.Context(), tenantID, status, poID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list goods receipts")
 	}
-	return httputil.Success(c, "goods receipts retrieved", rows)
+	return httputil.SuccessWithMeta(c, "goods receipts retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetGRN(c *fiber.Ctx) error {
@@ -587,11 +606,17 @@ func (h *Handler) ListInvoices(c *fiber.Ctx) error {
 			supplierID = &v
 		}
 	}
-	rows, err := h.svc.ListInvoices(c.Context(), tenantID, c.Query("status"), supplierID)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountInvoices(c.Context(), tenantID, status, supplierID)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count invoices")
+	}
+	rows, err := h.svc.ListInvoices(c.Context(), tenantID, status, supplierID, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list invoices")
 	}
-	return httputil.Success(c, "invoices retrieved", rows)
+	return httputil.SuccessWithMeta(c, "invoices retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetInvoice(c *fiber.Ctx) error {

@@ -45,8 +45,9 @@ type Repository interface {
 	// Document sequence
 	NextCode(ctx context.Context, tenantID uint, docType string) (string, error)
 
-	// Material Requests
-	ListMRs(ctx context.Context, tenantID uint, status string) ([]MaterialRequest, error)
+	// Material Requests. `limit=0` = unbounded.
+	ListMRs(ctx context.Context, tenantID uint, status string, limit, offset int) ([]MaterialRequest, error)
+	CountMRs(ctx context.Context, tenantID uint, status string) (int64, error)
 	ListMRsByMO(ctx context.Context, tenantID, moID uint) ([]MaterialRequest, error)
 	GetMR(ctx context.Context, tenantID, id uint) (*MaterialRequest, error)
 	CreateMR(ctx context.Context, mr *MaterialRequest) error
@@ -59,8 +60,9 @@ type Repository interface {
 	UpdateMRLine(ctx context.Context, line *MRLine) error
 	DeleteMRLine(ctx context.Context, tenantID, id uint) error
 
-	// Goods Transfers
-	ListTransfers(ctx context.Context, tenantID uint, status string) ([]GoodsTransfer, error)
+	// Goods Transfers. `limit=0` = unbounded.
+	ListTransfers(ctx context.Context, tenantID uint, status string, limit, offset int) ([]GoodsTransfer, error)
+	CountTransfers(ctx context.Context, tenantID uint, status string) (int64, error)
 	ListTransfersByMO(ctx context.Context, tenantID, moID uint) ([]GoodsTransfer, error)
 	GetTransfer(ctx context.Context, tenantID, id uint) (*GoodsTransfer, error)
 	CreateTransfer(ctx context.Context, t *GoodsTransfer) error
@@ -72,8 +74,9 @@ type Repository interface {
 	SendTransfer(ctx context.Context, tenantID, id, userID uint) error
 	ReceiveTransfer(ctx context.Context, tenantID, id, userID uint) error
 
-	// Goods Issues
-	ListIssues(ctx context.Context, tenantID uint, status, reason string) ([]GoodsIssue, error)
+	// Goods Issues. `limit=0` = unbounded.
+	ListIssues(ctx context.Context, tenantID uint, status, reason string, limit, offset int) ([]GoodsIssue, error)
+	CountIssues(ctx context.Context, tenantID uint, status, reason string) (int64, error)
 	ListIssuesByMO(ctx context.Context, tenantID, moID uint) ([]GoodsIssue, error)
 	GetIssue(ctx context.Context, tenantID, id uint) (*GoodsIssue, error)
 	CreateIssue(ctx context.Context, gi *GoodsIssue) error
@@ -85,8 +88,9 @@ type Repository interface {
 	ConfirmIssue(ctx context.Context, tenantID, id, userID uint) error
 	SetIssueStatus(ctx context.Context, tenantID, id uint, status string) error
 
-	// Stock Adjustments
-	ListAdjustments(ctx context.Context, tenantID uint, status string) ([]StockAdjustment, error)
+	// Stock Adjustments. `limit=0` = unbounded.
+	ListAdjustments(ctx context.Context, tenantID uint, status string, limit, offset int) ([]StockAdjustment, error)
+	CountAdjustments(ctx context.Context, tenantID uint, status string) (int64, error)
 	GetAdjustment(ctx context.Context, tenantID, id uint) (*StockAdjustment, error)
 	CreateAdjustment(ctx context.Context, sa *StockAdjustment) error
 	UpdateAdjustment(ctx context.Context, sa *StockAdjustment) error
@@ -97,8 +101,9 @@ type Repository interface {
 	ConfirmAdjustment(ctx context.Context, tenantID, id, userID uint) error
 	SetAdjustmentStatus(ctx context.Context, tenantID, id uint, status string) error
 
-	// Quality Checks
-	ListQualityChecks(ctx context.Context, tenantID uint, status string) ([]QualityCheck, error)
+	// Quality Checks. `limit=0` = unbounded.
+	ListQualityChecks(ctx context.Context, tenantID uint, status string, limit, offset int) ([]QualityCheck, error)
+	CountQualityChecks(ctx context.Context, tenantID uint, status string) (int64, error)
 	ListQCsByRefs(ctx context.Context, tenantID uint, refType string, refIDs []uint) ([]QualityCheck, error)
 	GetQualityCheck(ctx context.Context, tenantID, id uint) (*QualityCheck, error)
 	CreateQualityCheck(ctx context.Context, qc *QualityCheck) error
@@ -190,13 +195,26 @@ func (r *dbRepository) writeToLedger(ctx context.Context, rows []ledgerRow) {
 
 // ── Material Requests ─────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListMRs(ctx context.Context, tenantID uint, status string) ([]MaterialRequest, error) {
+func (r *dbRepository) ListMRs(ctx context.Context, tenantID uint, status string, limit, offset int) ([]MaterialRequest, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []MaterialRequest
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountMRs(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&MaterialRequest{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) ListMRsByMO(ctx context.Context, tenantID, moID uint) ([]MaterialRequest, error) {
@@ -271,13 +289,26 @@ func (r *dbRepository) DeleteMRLine(ctx context.Context, tenantID, id uint) erro
 
 // ── Goods Transfers ───────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListTransfers(ctx context.Context, tenantID uint, status string) ([]GoodsTransfer, error) {
+func (r *dbRepository) ListTransfers(ctx context.Context, tenantID uint, status string, limit, offset int) ([]GoodsTransfer, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []GoodsTransfer
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountTransfers(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&GoodsTransfer{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) ListTransfersByMO(ctx context.Context, tenantID, moID uint) ([]GoodsTransfer, error) {
@@ -407,7 +438,7 @@ func (r *dbRepository) ReceiveTransfer(ctx context.Context, tenantID, id, userID
 
 // ── Goods Issues ──────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListIssues(ctx context.Context, tenantID uint, status, reason string) ([]GoodsIssue, error) {
+func (r *dbRepository) ListIssues(ctx context.Context, tenantID uint, status, reason string, limit, offset int) ([]GoodsIssue, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -419,8 +450,26 @@ func (r *dbRepository) ListIssues(ctx context.Context, tenantID uint, status, re
 			SELECT id FROM document_types WHERE tenant_id = ? AND model = 'GI' AND system_key = ?
 		)`, tenantID, reason)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []GoodsIssue
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountIssues(ctx context.Context, tenantID uint, status, reason string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&GoodsIssue{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if reason != "" {
+		q = q.Where(`document_type_id IN (
+			SELECT id FROM document_types WHERE tenant_id = ? AND model = 'GI' AND system_key = ?
+		)`, tenantID, reason)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) ListIssuesByMO(ctx context.Context, tenantID, moID uint) ([]GoodsIssue, error) {
@@ -577,13 +626,26 @@ func (r *dbRepository) ConfirmIssue(ctx context.Context, tenantID, id, userID ui
 
 // ── Stock Adjustments ─────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListAdjustments(ctx context.Context, tenantID uint, status string) ([]StockAdjustment, error) {
+func (r *dbRepository) ListAdjustments(ctx context.Context, tenantID uint, status string, limit, offset int) ([]StockAdjustment, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []StockAdjustment
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountAdjustments(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&StockAdjustment{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetAdjustment(ctx context.Context, tenantID, id uint) (*StockAdjustment, error) {
@@ -677,13 +739,26 @@ func (r *dbRepository) ConfirmAdjustment(ctx context.Context, tenantID, id, user
 
 // ── Quality Checks ────────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListQualityChecks(ctx context.Context, tenantID uint, status string) ([]QualityCheck, error) {
+func (r *dbRepository) ListQualityChecks(ctx context.Context, tenantID uint, status string, limit, offset int) ([]QualityCheck, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []QualityCheck
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountQualityChecks(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&QualityCheck{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) ListQCsByRefs(ctx context.Context, tenantID uint, refType string, refIDs []uint) ([]QualityCheck, error) {

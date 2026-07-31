@@ -191,11 +191,18 @@ func (h *Handler) DeleteEstimateLine(c *fiber.Ctx) error {
 // ── Production Plans ──────────────────────────────────────────────────────────
 
 func (h *Handler) ListPlans(c *fiber.Ctx) error {
-	rows, err := h.svc.ListPlans(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountPlans(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count production plans")
+	}
+	rows, err := h.svc.ListPlans(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list production plans")
 	}
-	return httputil.Success(c, "production plans retrieved", rows)
+	return httputil.SuccessWithMeta(c, "production plans retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetPlan(c *fiber.Ctx) error {
@@ -365,11 +372,18 @@ func (h *Handler) DeletePlanInput(c *fiber.Ctx) error {
 // ── Production Orders ─────────────────────────────────────────────────────────
 
 func (h *Handler) ListOrders(c *fiber.Ctx) error {
-	rows, err := h.svc.ListOrders(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountOrders(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count production orders")
+	}
+	rows, err := h.svc.ListOrders(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list production orders")
 	}
-	return httputil.Success(c, "production orders retrieved", rows)
+	return httputil.SuccessWithMeta(c, "production orders retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetOrder(c *fiber.Ctx) error {

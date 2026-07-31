@@ -108,8 +108,11 @@ func (s *Service) RecordPayment(ctx context.Context, tenantID, userID uint, req 
 	return p, nil
 }
 
-func (s *Service) ListPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string, limit int) ([]Payment, error) {
-	return s.repo.ListPayments(ctx, tenantID, invoiceKind, invoiceID, partyID, direction, limit)
+func (s *Service) ListPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string, limit, offset int) ([]Payment, error) {
+	return s.repo.ListPayments(ctx, tenantID, invoiceKind, invoiceID, partyID, direction, limit, offset)
+}
+func (s *Service) CountPayments(ctx context.Context, tenantID uint, invoiceKind string, invoiceID, partyID uint, direction string) (int64, error) {
+	return s.repo.CountPayments(ctx, tenantID, invoiceKind, invoiceID, partyID, direction)
 }
 
 func (s *Service) GetPayment(ctx context.Context, tenantID, id uint) (*Payment, error) {
@@ -140,8 +143,11 @@ func (s *Service) UpdateSettings(ctx context.Context, tenantID uint, req *Update
 
 // ── Journal Entries (read-only listing) ─────────────────────────────────────
 
-func (s *Service) ListJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint, limit int) ([]JournalEntry, error) {
-	return s.repo.ListJournalEntries(ctx, tenantID, sourceType, sourceID, limit)
+func (s *Service) ListJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint, limit, offset int) ([]JournalEntry, error) {
+	return s.repo.ListJournalEntries(ctx, tenantID, sourceType, sourceID, limit, offset)
+}
+func (s *Service) CountJournalEntries(ctx context.Context, tenantID uint, sourceType string, sourceID uint) (int64, error) {
+	return s.repo.CountJournalEntries(ctx, tenantID, sourceType, sourceID)
 }
 
 func (s *Service) GetJournalEntry(ctx context.Context, tenantID, id uint) (*JournalEntry, error) {

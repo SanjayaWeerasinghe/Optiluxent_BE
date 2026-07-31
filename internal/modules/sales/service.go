@@ -187,8 +187,11 @@ func calcSQTotals(sq *SalesQuotation) {
 
 // ── Sales Quotations ──────────────────────────────────────────────────────────
 
-func (s *Service) ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesQuotation, error) {
-	return s.repo.ListSQs(ctx, tenantID, customerID, status)
+func (s *Service) ListSQs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesQuotation, error) {
+	return s.repo.ListSQs(ctx, tenantID, customerID, status, limit, offset)
+}
+func (s *Service) CountSQs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error) {
+	return s.repo.CountSQs(ctx, tenantID, customerID, status)
 }
 
 func (s *Service) GetSQ(ctx context.Context, tenantID, id uint) (*SalesQuotation, error) {
@@ -508,8 +511,11 @@ func (s *Service) DeleteSQLine(ctx context.Context, tenantID, sqID, lineID uint)
 
 // ── Sales Orders ──────────────────────────────────────────────────────────────
 
-func (s *Service) ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesOrder, error) {
-	return s.repo.ListSOs(ctx, tenantID, customerID, status)
+func (s *Service) ListSOs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesOrder, error) {
+	return s.repo.ListSOs(ctx, tenantID, customerID, status, limit, offset)
+}
+func (s *Service) CountSOs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error) {
+	return s.repo.CountSOs(ctx, tenantID, customerID, status)
 }
 
 func (s *Service) GetSO(ctx context.Context, tenantID, id uint) (*SalesOrder, error) {
@@ -796,8 +802,11 @@ func (s *Service) DeleteSOLine(ctx context.Context, tenantID, soID, lineID uint)
 
 // ── Delivery Orders ───────────────────────────────────────────────────────────
 
-func (s *Service) ListDOs(ctx context.Context, tenantID uint, soID *uint, status string) ([]DeliveryOrder, error) {
-	return s.repo.ListDOs(ctx, tenantID, soID, status)
+func (s *Service) ListDOs(ctx context.Context, tenantID uint, soID *uint, status string, limit, offset int) ([]DeliveryOrder, error) {
+	return s.repo.ListDOs(ctx, tenantID, soID, status, limit, offset)
+}
+func (s *Service) CountDOs(ctx context.Context, tenantID uint, soID *uint, status string) (int64, error) {
+	return s.repo.CountDOs(ctx, tenantID, soID, status)
 }
 
 func (s *Service) GetDO(ctx context.Context, tenantID, id uint) (*DeliveryOrder, error) {
@@ -1040,8 +1049,11 @@ func (s *Service) DeleteDOLine(ctx context.Context, tenantID, doID, lineID uint)
 
 // ── Sales Invoices ────────────────────────────────────────────────────────────
 
-func (s *Service) ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string) ([]SalesInvoice, error) {
-	return s.repo.ListSIs(ctx, tenantID, customerID, status)
+func (s *Service) ListSIs(ctx context.Context, tenantID uint, customerID *uint, status string, limit, offset int) ([]SalesInvoice, error) {
+	return s.repo.ListSIs(ctx, tenantID, customerID, status, limit, offset)
+}
+func (s *Service) CountSIs(ctx context.Context, tenantID uint, customerID *uint, status string) (int64, error) {
+	return s.repo.CountSIs(ctx, tenantID, customerID, status)
 }
 
 func (s *Service) GetSI(ctx context.Context, tenantID, id uint) (*SalesInvoice, error) {

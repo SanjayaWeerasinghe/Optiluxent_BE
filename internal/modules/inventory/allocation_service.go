@@ -204,8 +204,13 @@ func (s *AllocationService) ReservedByProductWarehouse(ctx context.Context, tena
 }
 
 // ListActive — for the FE Allocations section.
-func (s *AllocationService) ListActive(ctx context.Context, tenantID uint, filters AllocationFilters) ([]Allocation, error) {
-	return s.repo.ListActive(ctx, tenantID, filters)
+func (s *AllocationService) ListActive(ctx context.Context, tenantID uint, filters AllocationFilters, limit, offset int) ([]Allocation, error) {
+	return s.repo.ListActive(ctx, tenantID, filters, limit, offset)
+}
+
+// CountActive — total rows matching the filter (drives the pager footer).
+func (s *AllocationService) CountActive(ctx context.Context, tenantID uint, filters AllocationFilters) (int64, error) {
+	return s.repo.CountActive(ctx, tenantID, filters)
 }
 
 // ── internals ────────────────────────────────────────────────────────────────

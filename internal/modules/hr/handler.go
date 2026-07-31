@@ -190,16 +190,23 @@ func (h *Handler) DeleteEmergency(c *fiber.Ctx) error {
 // ── Attendance ──────────────────────────────────────────────────────────────
 
 func (h *Handler) ListAttendance(c *fiber.Ctx) error {
+	tenantID := tenantFromCtx(c)
 	employeeID, _ := strconv.ParseUint(c.Query("employee_id", "0"), 10, 64)
 	from := c.Query("from")
 	to := c.Query("to")
-	rows, err := h.svc.ListAttendance(c.Context(), tenantFromCtx(c), uint(employeeID), from, to)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountAttendance(c.Context(), tenantID, uint(employeeID), from, to)
 	if err != nil {
 		return httputil.InternalServerError(c, err.Error())
 	}
-	return httputil.Success(c, "attendance retrieved", rows)
+	rows, err := h.svc.ListAttendance(c.Context(), tenantID, uint(employeeID), from, to, limit, offset)
+	if err != nil {
+		return httputil.InternalServerError(c, err.Error())
+	}
+	return httputil.SuccessWithMeta(c, "attendance retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
+// Per-employee tab — unbounded (fits inside the modal). No pager here.
 func (h *Handler) ListAttendanceForEmployee(c *fiber.Ctx) error {
 	employeeID, err := parseID(c, "id")
 	if err != nil {
@@ -207,7 +214,7 @@ func (h *Handler) ListAttendanceForEmployee(c *fiber.Ctx) error {
 	}
 	from := c.Query("from")
 	to := c.Query("to")
-	rows, err := h.svc.ListAttendance(c.Context(), tenantFromCtx(c), employeeID, from, to)
+	rows, err := h.svc.ListAttendance(c.Context(), tenantFromCtx(c), employeeID, from, to, 0, 0)
 	if err != nil {
 		return httputil.InternalServerError(c, err.Error())
 	}

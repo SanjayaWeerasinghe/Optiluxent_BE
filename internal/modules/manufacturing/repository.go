@@ -24,8 +24,9 @@ type Repository interface {
 	AddEstimateLine(ctx context.Context, line *CostEstimateLine) error
 	DeleteEstimateLine(ctx context.Context, tenantID, lineID uint) error
 
-	// Production Plans
-	ListPlans(ctx context.Context, tenantID uint, status string) ([]ProductionPlan, error)
+	// Production Plans. `limit=0` = unbounded.
+	ListPlans(ctx context.Context, tenantID uint, status string, limit, offset int) ([]ProductionPlan, error)
+	CountPlans(ctx context.Context, tenantID uint, status string) (int64, error)
 	GetPlan(ctx context.Context, tenantID, id uint) (*ProductionPlan, error)
 	CreatePlan(ctx context.Context, plan *ProductionPlan) error
 	UpdatePlan(ctx context.Context, plan *ProductionPlan) error
@@ -38,8 +39,9 @@ type Repository interface {
 	UpdatePlanInput(ctx context.Context, input *ProductionPlanInput) error
 	DeletePlanInput(ctx context.Context, tenantID, inputID uint) error
 
-	// Production Orders
-	ListOrders(ctx context.Context, tenantID uint, status string) ([]ProductionOrder, error)
+	// Production Orders. `limit=0` = unbounded.
+	ListOrders(ctx context.Context, tenantID uint, status string, limit, offset int) ([]ProductionOrder, error)
+	CountOrders(ctx context.Context, tenantID uint, status string) (int64, error)
 	GetOrder(ctx context.Context, tenantID, id uint) (*ProductionOrder, error)
 	IncrementProducedQty(ctx context.Context, tenantID, id uint, delta float64) error
 	CreateOrder(ctx context.Context, order *ProductionOrder) error
@@ -155,13 +157,26 @@ func (r *dbRepository) DeleteEstimateLine(ctx context.Context, tenantID, lineID 
 
 // ── Production Plans ──────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListPlans(ctx context.Context, tenantID uint, status string) ([]ProductionPlan, error) {
+func (r *dbRepository) ListPlans(ctx context.Context, tenantID uint, status string, limit, offset int) ([]ProductionPlan, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []ProductionPlan
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountPlans(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&ProductionPlan{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetPlan(ctx context.Context, tenantID, id uint) (*ProductionPlan, error) {
@@ -215,13 +230,26 @@ func (r *dbRepository) DeletePlan(ctx context.Context, tenantID, id uint) error 
 
 // ── Production Orders ─────────────────────────────────────────────────────────
 
-func (r *dbRepository) ListOrders(ctx context.Context, tenantID uint, status string) ([]ProductionOrder, error) {
+func (r *dbRepository) ListOrders(ctx context.Context, tenantID uint, status string, limit, offset int) ([]ProductionOrder, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
+	q = q.Order("created_at DESC")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
 	var rows []ProductionOrder
-	return rows, q.Order("created_at DESC").Find(&rows).Error
+	return rows, q.Find(&rows).Error
+}
+
+func (r *dbRepository) CountOrders(ctx context.Context, tenantID uint, status string) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&ProductionOrder{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var n int64
+	return n, q.Count(&n).Error
 }
 
 func (r *dbRepository) GetOrder(ctx context.Context, tenantID, id uint) (*ProductionOrder, error) {

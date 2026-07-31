@@ -64,11 +64,18 @@ func parseOptionalUint(s string) *uint {
 // ── Material Requests ─────────────────────────────────────────────────────────
 
 func (h *Handler) ListMRs(c *fiber.Ctx) error {
-	rows, err := h.svc.ListMRs(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountMRs(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count material requests")
+	}
+	rows, err := h.svc.ListMRs(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list material requests")
 	}
-	return httputil.Success(c, "material requests retrieved", rows)
+	return httputil.SuccessWithMeta(c, "material requests retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetMR(c *fiber.Ctx) error {
@@ -241,11 +248,18 @@ func (h *Handler) DeleteMRLine(c *fiber.Ctx) error {
 // ── Goods Transfers ───────────────────────────────────────────────────────────
 
 func (h *Handler) ListTransfers(c *fiber.Ctx) error {
-	rows, err := h.svc.ListTransfers(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountTransfers(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count goods transfers")
+	}
+	rows, err := h.svc.ListTransfers(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list goods transfers")
 	}
-	return httputil.Success(c, "goods transfers retrieved", rows)
+	return httputil.SuccessWithMeta(c, "goods transfers retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetTransfer(c *fiber.Ctx) error {
@@ -387,11 +401,19 @@ func (h *Handler) DeleteTransferLine(c *fiber.Ctx) error {
 // ── Goods Issues ──────────────────────────────────────────────────────────────
 
 func (h *Handler) ListIssues(c *fiber.Ctx) error {
-	rows, err := h.svc.ListIssues(c.Context(), tenantFromCtx(c), c.Query("status"), c.Query("reason"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	reason := c.Query("reason")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountIssues(c.Context(), tenantID, status, reason)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count goods issues")
+	}
+	rows, err := h.svc.ListIssues(c.Context(), tenantID, status, reason, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list goods issues")
 	}
-	return httputil.Success(c, "goods issues retrieved", rows)
+	return httputil.SuccessWithMeta(c, "goods issues retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetIssue(c *fiber.Ctx) error {
@@ -533,11 +555,18 @@ func (h *Handler) DeleteIssueLine(c *fiber.Ctx) error {
 // ── Stock Adjustments ─────────────────────────────────────────────────────────
 
 func (h *Handler) ListAdjustments(c *fiber.Ctx) error {
-	rows, err := h.svc.ListAdjustments(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountAdjustments(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count stock adjustments")
+	}
+	rows, err := h.svc.ListAdjustments(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list stock adjustments")
 	}
-	return httputil.Success(c, "stock adjustments retrieved", rows)
+	return httputil.SuccessWithMeta(c, "stock adjustments retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetAdjustment(c *fiber.Ctx) error {
@@ -679,11 +708,18 @@ func (h *Handler) DeleteAdjustmentLine(c *fiber.Ctx) error {
 // ── Quality Checks ────────────────────────────────────────────────────────────
 
 func (h *Handler) ListQualityChecks(c *fiber.Ctx) error {
-	rows, err := h.svc.ListQualityChecks(c.Context(), tenantFromCtx(c), c.Query("status"))
+	tenantID := tenantFromCtx(c)
+	status := c.Query("status")
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.CountQualityChecks(c.Context(), tenantID, status)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count quality checks")
+	}
+	rows, err := h.svc.ListQualityChecks(c.Context(), tenantID, status, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to list quality checks")
 	}
-	return httputil.Success(c, "quality checks retrieved", rows)
+	return httputil.SuccessWithMeta(c, "quality checks retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }
 
 func (h *Handler) GetQualityCheck(c *fiber.Ctx) error {
@@ -828,9 +864,15 @@ func (h *Handler) ListAllocations(c *fiber.Ctx) error {
 		SourceType:  c.Query("source_type"),
 		SourceDocID: parseOptionalUint(c.Query("source_doc_id")),
 	}
-	rows, err := h.svc.Allocation().ListActive(c.Context(), tenantFromCtx(c), f)
+	tenantID := tenantFromCtx(c)
+	page, perPage, limit, offset := httputil.ParsePage(c)
+	total, err := h.svc.Allocation().CountActive(c.Context(), tenantID, f)
+	if err != nil {
+		return httputil.InternalServerError(c, "failed to count allocations")
+	}
+	rows, err := h.svc.Allocation().ListActive(c.Context(), tenantID, f, limit, offset)
 	if err != nil {
 		return httputil.InternalServerError(c, "failed to retrieve allocations")
 	}
-	return httputil.Success(c, "allocations retrieved", rows)
+	return httputil.SuccessWithMeta(c, "allocations retrieved", rows, httputil.Paginate(page, perPage, int(total)))
 }

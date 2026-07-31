@@ -223,8 +223,11 @@ func transferRatioOrOne(r float64) float64 {
 
 // ── Purchase Requests ─────────────────────────────────────────────────────────
 
-func (s *Service) ListPRs(ctx context.Context, tenantID uint, status string) ([]PurchaseRequest, error) {
-	return s.repo.ListPRs(ctx, tenantID, status)
+func (s *Service) ListPRs(ctx context.Context, tenantID uint, status string, limit, offset int) ([]PurchaseRequest, error) {
+	return s.repo.ListPRs(ctx, tenantID, status, limit, offset)
+}
+func (s *Service) CountPRs(ctx context.Context, tenantID uint, status string) (int64, error) {
+	return s.repo.CountPRs(ctx, tenantID, status)
 }
 
 func (s *Service) GetPR(ctx context.Context, tenantID, id uint) (*PurchaseRequest, error) {
@@ -407,8 +410,11 @@ func (s *Service) DeletePRItem(ctx context.Context, tenantID, id uint) error {
 
 // ── Purchase Orders ───────────────────────────────────────────────────────────
 
-func (s *Service) ListPOs(ctx context.Context, tenantID uint, status string, supplierID *uint) ([]PurchaseOrder, error) {
-	return s.repo.ListPOs(ctx, tenantID, status, supplierID)
+func (s *Service) ListPOs(ctx context.Context, tenantID uint, status string, supplierID *uint, limit, offset int) ([]PurchaseOrder, error) {
+	return s.repo.ListPOs(ctx, tenantID, status, supplierID, limit, offset)
+}
+func (s *Service) CountPOs(ctx context.Context, tenantID uint, status string, supplierID *uint) (int64, error) {
+	return s.repo.CountPOs(ctx, tenantID, status, supplierID)
 }
 
 func (s *Service) GetPO(ctx context.Context, tenantID, id uint) (*PurchaseOrder, error) {
@@ -652,8 +658,11 @@ func (s *Service) ListGRNsByMO(ctx context.Context, tenantID, moID uint) ([]Good
 	return s.repo.ListGRNsByMO(ctx, tenantID, moID)
 }
 
-func (s *Service) ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint) ([]GoodsReceipt, error) {
-	return s.repo.ListGRNs(ctx, tenantID, status, poID)
+func (s *Service) ListGRNs(ctx context.Context, tenantID uint, status string, poID *uint, limit, offset int) ([]GoodsReceipt, error) {
+	return s.repo.ListGRNs(ctx, tenantID, status, poID, limit, offset)
+}
+func (s *Service) CountGRNs(ctx context.Context, tenantID uint, status string, poID *uint) (int64, error) {
+	return s.repo.CountGRNs(ctx, tenantID, status, poID)
 }
 
 func (s *Service) GetGRN(ctx context.Context, tenantID, id uint) (*GoodsReceipt, error) {
@@ -981,8 +990,11 @@ func (s *Service) AutoInvoiceFromGRN(ctx context.Context, tenantID, grnID, userI
 
 // ── Purchase Invoices ─────────────────────────────────────────────────────────
 
-func (s *Service) ListInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint) ([]PurchaseInvoice, error) {
-	return s.repo.ListInvoices(ctx, tenantID, status, supplierID)
+func (s *Service) ListInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint, limit, offset int) ([]PurchaseInvoice, error) {
+	return s.repo.ListInvoices(ctx, tenantID, status, supplierID, limit, offset)
+}
+func (s *Service) CountInvoices(ctx context.Context, tenantID uint, status string, supplierID *uint) (int64, error) {
+	return s.repo.CountInvoices(ctx, tenantID, status, supplierID)
 }
 
 func (s *Service) GetInvoice(ctx context.Context, tenantID, id uint) (*PurchaseInvoice, error) {
